@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B3954">
+<title>Barcelona 2026</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{sea:'#0B3954',az:'#1B8A9A',sun:'#F4B63F',salt:'#F3F7F8'}}}}</script>
+<script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style type="text/tailwindcss">
+@layer base{html,body{background:#F3F7F8;color:#0B3954;font-family:Inter,system-ui,sans-serif}.font-display{font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:800}}
+@layer components{
+.chip{@apply shrink-0 rounded-full border border-sea/20 bg-white px-4 py-2 text-sm font-semibold whitespace-nowrap}
+.chip.on{@apply bg-sea text-white border-sea}
+.btn-ic{@apply shrink-0 rounded-full p-2 text-sea/80 active:bg-sea/10}
+.btn-ic svg{width:1.25rem;height:1.25rem}
+.btn{@apply inline-flex items-center justify-center gap-2 rounded-xl bg-sea px-4 py-3 font-semibold text-white active:opacity-80}
+.inp{@apply w-full rounded-xl border border-sea/20 bg-white px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-az}
+.lbl{@apply mb-1 mt-3 block text-sm font-semibold}
+}
+:root{padding-top:env(safe-area-inset-top,0px)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="fixed left-1/2 top-4 z-50 hidden -translate-x-1/2 rounded-full bg-sea px-4 py-2 text-sm text-white shadow-lg"></div>
+<script>
+const $=s=>document.querySelector(s),
+h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
+uid=()=>Math.random().toString(36).slice(2,9),
+eur=n=>n.toLocaleString('de-DE',{style:'currency',currency:'EUR'}),
+DAYS=[...Array(7)].map((_,i)=>`2026-10-${19+i}`),
+dl=d=>new Date(d+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'numeric'}),
+HOTEL={name:'Hotel del Mar',addr:'Hotel del Mar, Pla de Palau, 19, Barcelona'},
+maps=q=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q),
+sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('bcn26:'+s)))].map(b=>b.toString(16).padStart(2,'0')).join(''),
+sorted=a=>[...a].sort((x,y)=>(x.time||'99').localeCompare(y.time||'99')),
+HOLA={2:18.7,3:27.3,4:35.6,5:43.6},
+PACK=['Reisepass / Personalausweis','Tickets offline speichern','Auslandskrankenversicherung / Versichertenkarte','Powerbank & Ladekabel','Regenjacke (Oktober)','Bequeme Laufschuhe','Sonnenbrille & Sonnencreme','Badesachen','Bauchtasche gegen Taschendiebe','Wasserflasche','Medikamente / Reiseapotheke','Bargeld in Euro'],
+SQL=`create table if not exists trip_state(
+  key text primary key,
+  value jsonb,
+  updated_at timestamptz default now());
+alter table trip_state enable row level security;
+create policy "gruppe" on trip_state for all using (true) with check (true);
+alter publication supabase_realtime add table trip_state;`;
+
+let cfg=JSON.parse(localStorage.bcn_cfg||'{}'), sb=null, S={},
+ui={tab:'plan',plan:null,day:DAYS[0],modal:null,sync:'local',err:'',busy:false,pend:false,tr:{p:4,days:6,r:4,hd:5}};
+
+const seed=()=>({
+ plans:[{id:uid(),name:'Hauptplan der Gruppe',days:{
+  '2026-10-19':[{id:uid(),time:'10:00',title:'Abflug ab Prag',place:'Václav Havel Airport Prague',note:'Hinflug gegen 10:00 Uhr',done:false},
+   {id:uid(),time:'',title:'Check-in Hotel del Mar',place:HOTEL.addr,note:'Metro Barceloneta (L4) liegt in der Nähe',done:false}],
+  '2026-10-25':[{id:uid(),time:'',title:'Rückflug nach Prag (früh morgens)',place:'Barcelona-El Prat Airport',note:'Transfer zum Flughafen am Vorabend planen',done:false}]}}],
+ budget:{people:['Person 1','Person 2','Person 3','Person 4'],items:[]},
+ packing:PACK.map(t=>({id:uid(),t,d:false}))});
+
+function loadLocal(){const s=seed();for(const k in s){try{const v=JSON.parse(localStorage['bcn_'+k]);if(v)s[k]=v}catch{}}S=s}
+const plan=()=>S.plans.find(p=>p.id===ui.plan)||S.plans[0];
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.add('hidden'),2800)}
+
+/* ---------- Supabase ---------- */
+function connect(){if(!cfg.url||!cfg.key)return false;try{sb=supabase.createClient(cfg.url,cfg.key);return true}catch{sb=null;return false}}
+async function pull(){const {data,error}=await sb.from('trip_state').select('key,value');if(error)throw error;
+ data.forEach(r=>{if(r.key in S){S[r.key]=r.value;localStorage['bcn_'+r.key]=JSON.stringify(r.value)}});return data}
+async function push(k){localStorage['bcn_'+k]=JSON.stringify(S[k]);if(!sb)return;
+ const {error}=await sb.from('trip_state').upsert({key:k,value:S[k],updated_at:new Date().toISOString()});
+ ui.sync=error?'err':'ok';if(error)toast('Speichern fehlgeschlagen: '+error.message);render()}
+function listen(){sb.channel('trip').on('postgres_changes',{event:'*',schema:'public',table:'trip_state'},p=>{
+ const r=p.new;if(r&&r.key in S&&JSON.stringify(S[r.key])!==JSON.stringify(r.value)){S[r.key]=r.value;localStorage['bcn_'+r.key]=JSON.stringify(r.value);
+ const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&$('#app').contains(a))ui.pend=true;else{render();toast('Von Mitreisenden aktualisiert')}}}).subscribe()}
+const save=k=>{push(k);render()};
+
+async function start(){loadLocal();
+ if(connect()){try{const rows=await pull();for(const k of Object.keys(S))if(!rows.some(r=>r.key===k))await push(k);listen();ui.sync='ok'}catch(e){ui.sync='err';toast('Supabase: '+e.message)}}
+ ui.plan=plan()?.id;render()}
+
+/* ---------- Views ---------- */
+function vLogin(){return `<div class="mx-auto flex min-h-screen max-w-sm flex-col justify-center bg-sea px-6 py-10 text-white" style="min-width:100%"><div class="mx-auto w-full max-w-sm">
+<i data-lucide="lock" class="mb-4"></i><h1 class="font-display text-5xl">Barcelona</h1><p class="mt-1 text-white/70">19.–25. Oktober 2026 für 4 Personen</p>
+<label class="lbl mt-8" for="l-pin">Gruppen-PIN</label><input id="l-pin" type="password" autocomplete="current-password" class="inp text-sea" placeholder="mind. 4 Zeichen">
+<p class="mt-1 text-xs text-white/60">Erster Start: Die PIN, die du jetzt eingibst, wird zur Gruppen-PIN.</p>
+${ui.err?`<p class="mt-3 rounded-lg bg-white/15 p-2 text-sm">${h(ui.err)}</p>`:''}
+<button data-a="login" class="btn mt-5 w-full bg-sun !text-sea">Entsperren</button>
+<details class="mt-6 text-sm"><summary class="cursor-pointer text-white/80">Verbindung zu Supabase (optional)</summary>
+<label class="lbl" for="l-url">Project URL</label><input id="l-url" class="inp text-sea" value="${h(cfg.url||'')}" placeholder="https://xxxx.supabase.co">
+<label class="lbl" for="l-key">Anon / Public Key</label><input id="l-key" class="inp text-sea" value="${h(cfg.key||'')}">
+<p class="mt-3 text-white/70">Ohne Eintrag läuft die App nur auf diesem Gerät. SQL für die Einrichtung:</p><pre class="mt-1 overflow-x-auto rounded-lg bg-black/30 p-2 text-xs">${h(SQL)}</pre></details></div></div>`}
+
+const vHead=()=>{const d=Math.ceil((new Date('2026-10-19T10:00')-new Date())/864e5),
+ c=d>0?`Noch ${d} ${d==1?'Tag':'Tage'}`:new Date()<new Date('2026-10-26')?'Reise läuft':'Gute Heimreise';
+ return `<header class="bg-sea px-4 pb-5 pt-4 text-white"><div class="mx-auto flex max-w-xl items-end justify-between"><div>
+<h1 class="font-display text-4xl leading-none">Barcelona</h1><p class="mt-1 text-sm text-white/70">19.–25. Oktober 2026, 4 Personen</p></div>
+<div class="text-right"><span class="rounded-full bg-sun px-3 py-1 text-sm font-semibold text-sea">${c}</span>
+<p class="mt-2 flex items-center justify-end gap-1 text-xs text-white/70"><i data-lucide="${ui.sync==='ok'?'wifi':ui.sync==='err'?'wifi-off':'smartphone'}" class="h-3 w-3"></i>${{ok:'Live synchron',err:'Sync-Fehler',local:'Nur lokal'}[ui.sync]}</p></div></div></header>`};
+
+const vNav=()=>`<nav class="fixed inset-x-0 bottom-0 z-30 border-t border-sea/10 bg-white" style="padding-bottom:env(safe-area-inset-bottom,0px)"><div class="mx-auto flex max-w-xl">${
+[['plan','calendar-days','Plan'],['tr','bus','Transport'],['bud','wallet','Budget'],['pack','backpack','Packen'],['set','settings','Mehr']].map(([k,i,l])=>
+`<button data-a="tab" data-t="${k}" class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs ${ui.tab===k?'font-semibold text-az':'text-sea/60'}"><i data-lucide="${i}"></i>${l}</button>`).join('')}</div></nav>`;
+
+function vPlan(){const p=plan(),its=sorted(p.days[ui.day]||[]),dn=its.filter(i=>i.done).length;
+return `<div class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2">${S.plans.map(x=>`<button data-a="plan" data-id="${x.id}" class="chip ${x.id===p.id?'on':''}">${h(x.name)}</button>`).join('')}<button data-a="addPlan" class="chip" aria-label="Neuer Plan"><i data-lucide="plus" class="h-4 w-4"></i></button></div>
+<div class="mt-3 flex items-center justify-between"><h2 class="font-display text-2xl">${h(p.name)}</h2><div class="flex"><button data-a="ai" class="btn-ic bg-sun" aria-label="KI-Assistent"><i data-lucide="sparkles"></i></button><button data-a="renPlan" class="btn-ic" aria-label="Umbenennen"><i data-lucide="pencil"></i></button><button data-a="delPlan" class="btn-ic" aria-label="Plan löschen"><i data-lucide="trash-2"></i></button></div></div>
+<a href="${maps(HOTEL.addr)}" target="_blank" rel="noopener" class="mt-3 flex items-center gap-3 rounded-2xl bg-az p-3 text-white"><i data-lucide="map-pin"></i><span class="flex-1"><b>${HOTEL.name}</b><br><span class="text-sm text-white/80">Pla de Palau, 19: In Google Maps öffnen</span></span><i data-lucide="external-link" class="h-4 w-4"></i></a>
+<div class="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-2">${DAYS.map(d=>`<button data-a="day" data-d="${d}" class="chip ${d===ui.day?'on':''}">${dl(d)}${(p.days[d]||[]).length?` (${p.days[d].length})`:''}</button>`).join('')}</div>
+${its.length?`<p class="mt-2 text-sm text-sea/70">${dn} von ${its.length} erledigt</p>`:''}
+<ul class="mt-1">${its.map(i=>`<li class="flex items-start gap-3 border-b border-sea/10 py-3 ${i.done?'opacity-50':''}"><input type="checkbox" data-a="toggle" data-id="${i.id}" ${i.done?'checked':''} class="mt-1 h-5 w-5 shrink-0 accent-[#1B8A9A]" aria-label="Erledigt">
+<div class="font-display w-12 shrink-0 text-sea">${h(i.time||'–')}</div><div class="min-w-0 flex-1"><div class="font-semibold ${i.done?'line-through':''}">${h(i.title)}</div>${i.note?`<div class="text-sm text-sea/70">${h(i.note)}</div>`:''}
+<a href="${maps(i.place||i.title+' Barcelona')}" target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-az"><i data-lucide="map-pin" class="h-4 w-4"></i>In Google Maps öffnen</a></div>
+<button data-a="item" data-id="${i.id}" class="btn-ic" aria-label="Bearbeiten"><i data-lucide="pencil"></i></button><button data-a="delItem" data-id="${i.id}" class="btn-ic" aria-label="Löschen"><i data-lucide="trash-2"></i></button></li>`).join('')||'<p class="py-6 text-sea/60">Für diesen Tag ist noch nichts geplant. Füge etwas hinzu oder lass den KI-Assistenten planen.</p>'}</ul>
+<button data-a="item" class="btn mt-4 w-full"><i data-lucide="plus"></i>Aktivität hinzufügen</button>`}
+
+function calc(){const t=ui.tr,P=t.p,rides=P*t.days*t.r,AP=5.9,hd=Math.min(t.hd,t.days),rest=P*Math.max(0,t.days-hd)*t.r;
+ return [['Einzeltickets (2,90 € pro Fahrt) plus Flughafen-Tickets',rides*2.9+P*2*AP],
+ ['T-Casual (10 Fahrten, 13 €) plus Flughafen-Tickets',Math.ceil(rides/10)*13+P*2*AP],
+ [`Hola Barcelona ${t.hd} Tage pro Person${t.hd<t.days?' plus T-Casual für die übrigen Tage':''}`,P*HOLA[t.hd]+Math.ceil(rest/10)*13+(t.hd>=t.days?0:P*AP)]].map(([n,v])=>({n,v}))}
+function vTr(){const t=ui.tr,r=calc(),min=Math.min(...r.map(x=>x.v));
+const num=(l,k)=>`<label class="block text-sm font-semibold">${l}<input type="number" min="1" value="${t[k]}" data-a="trin" data-k="${k}" class="inp mt-1"></label>`;
+return `<h2 class="font-display text-2xl">Transport-Berater</h2><p class="mt-1 text-sm text-sea/70">Richtpreise 2026 für Zone 1. Bitte vor dem Kauf auf tmb.cat und holabarcelona.com prüfen; online gibt es bei Hola Barcelona meist 10 % Rabatt.</p>
+<div class="mt-4 grid grid-cols-2 gap-3">${num('Personen','p')}${num('Tage in der Stadt','days')}${num('Fahrten pro Person und Tag','r')}
+<label class="block text-sm font-semibold">Hola-Karte<select data-a="trin" data-k="hd" class="inp mt-1">${[2,3,4,5].map(d=>`<option value="${d}" ${t.hd==d?'selected':''}>${d} Tage, ${eur(HOLA[d])}</option>`).join('')}</select></label></div>
+<div class="mt-4 space-y-2">${r.map(x=>`<div class="flex items-center justify-between gap-3 rounded-2xl p-3 ${x.v===min?'bg-sun':'bg-white'}"><span class="text-sm">${x.n}${x.v===min?'<br><b>Günstigste Variante</b>':''}</span><span class="text-right"><b class="font-display text-xl">${eur(x.v)}</b><br><span class="text-xs">${eur(x.v/t.p)} pro Person</span></span></div>`).join('')}</div>
+<div class="mt-4 space-y-1 text-sm text-sea/80"><p>Die Hola-Karte gilt ab der ersten Nutzung für 48 bis 120 Stunden am Stück und enthält die Flughafen-Metro. Gerechnet wird mit einer Aktivierung bei der Ankunft, die Rückfahrt zum Flughafen kommt bei längeren Aufenthalten extra dazu.</p><p>Die T-Casual lässt sich laut Anbietern meist von mehreren Personen teilen; kurz vor Ort prüfen.</p></div>
+<a href="https://www.google.com/maps/dir/?api=1&origin=Barcelona+El+Prat+Airport&destination=${encodeURIComponent(HOTEL.addr)}&travelmode=transit" target="_blank" rel="noopener" class="btn mt-4 w-full"><i data-lucide="navigation"></i>Route Flughafen zum Hotel in Google Maps</a>`}
+
+function settle(){const b=S.budget,n=b.people.length,tot=b.items.reduce((s,i)=>s+i.amt,0),sh=tot/n,
+ bal=b.people.map((p,i)=>b.items.filter(x=>x.by===i).reduce((s,x)=>s+x.amt,0)-sh),dv=[],cr=[],tr=[];
+ bal.forEach((v,i)=>v<-.005?dv.push([i,-v]):v>.005&&cr.push([i,v]));let a=0,c=0;
+ while(a<dv.length&&c<cr.length){const m=Math.min(dv[a][1],cr[c][1]);tr.push([dv[a][0],cr[c][0],m]);dv[a][1]-=m;cr[c][1]-=m;if(dv[a][1]<.005)a++;if(cr[c][1]<.005)c++}
+ return{tot,sh,bal,tr}}
+function vBud(){const b=S.budget,s=settle(),opt=b.people.map((p,i)=>`<option value="${i}">${h(p)}</option>`).join('');
+return `<h2 class="font-display text-2xl">Budget und Auslagen</h2>
+<div class="mt-3 flex flex-wrap gap-2">${b.people.map((p,i)=>`<button data-a="renPerson" data-i="${i}" class="chip">${h(p)}</button>`).join('')}</div><p class="mt-1 text-xs text-sea/60">Namen antippen zum Ändern.</p>
+<div class="mt-4 rounded-2xl bg-white p-3"><label class="lbl !mt-0" for="b-w">Was wurde bezahlt?</label><input id="b-w" class="inp" placeholder="z. B. Abendessen">
+<div class="grid grid-cols-2 gap-3"><div><label class="lbl" for="b-a">Betrag in €</label><input id="b-a" type="number" step="0.01" inputmode="decimal" class="inp"></div><div><label class="lbl" for="b-by">Bezahlt von</label><select id="b-by" class="inp">${opt}</select></div></div>
+<button data-a="addExp" class="btn mt-3 w-full"><i data-lucide="plus"></i>Ausgabe speichern</button></div>
+<div class="mt-4 rounded-2xl bg-sea p-4 text-white"><p class="text-sm text-white/70">Gesamt ${eur(s.tot)}, pro Person ${eur(s.sh)}</p>${s.tr.length?s.tr.map(([f,t,m])=>`<p class="mt-1 font-semibold">${h(b.people[f])} zahlt ${eur(m)} an ${h(b.people[t])}</p>`).join(''):'<p class="mt-1 font-semibold">Alles ausgeglichen</p>'}</div>
+<ul class="mt-3">${[...b.items].reverse().map(x=>`<li class="flex items-center gap-3 border-b border-sea/10 py-2"><div class="flex-1"><div class="font-semibold">${h(x.what)}</div><div class="text-sm text-sea/70">${h(b.people[x.by]||'?')}</div></div><b>${eur(x.amt)}</b><button data-a="delExp" data-id="${x.id}" class="btn-ic" aria-label="Löschen"><i data-lucide="trash-2"></i></button></li>`).join('')}</ul>`}
+
+function vPack(){const l=S.packing,d=l.filter(x=>x.d).length;
+return `<h2 class="font-display text-2xl">Packliste</h2><p class="text-sm text-sea/70">${d} von ${l.length} gepackt</p>
+<div class="mt-3 flex gap-2"><input id="p-t" class="inp" placeholder="Neuer Eintrag"><button data-a="addPack" class="btn" aria-label="Hinzufügen"><i data-lucide="plus"></i></button></div>
+<ul class="mt-2">${l.map(x=>`<li class="flex items-center gap-3 border-b border-sea/10 py-2.5 ${x.d?'opacity-50':''}"><input type="checkbox" data-a="togPack" data-id="${x.id}" ${x.d?'checked':''} class="h-5 w-5 accent-[#1B8A9A]"><span class="flex-1 ${x.d?'line-through':''}">${h(x.t)}</span><button data-a="delPack" data-id="${x.id}" class="btn-ic" aria-label="Löschen"><i data-lucide="trash-2"></i></button></li>`).join('')}</ul>`}
+
+const vSet=()=>`<h2 class="font-display text-2xl">Einstellungen</h2>
+<h3 class="mt-4 font-semibold">Supabase (Echtzeit-Sync)</h3>
+<label class="lbl" for="s-url">Project URL</label><input id="s-url" class="inp" value="${h(cfg.url||'')}" placeholder="https://xxxx.supabase.co">
+<label class="lbl" for="s-key">Anon / Public Key</label><input id="s-key" class="inp" value="${h(cfg.key||'')}">
+<h3 class="mt-6 font-semibold">Gemini KI</h3>
+<label class="lbl" for="s-gem">API-Key (Google AI Studio)</label><input id="s-gem" type="password" class="inp" value="${h(cfg.gem||'')}">
+<label class="lbl" for="s-model">Modell</label><input id="s-model" class="inp" value="${h(cfg.model||'gemini-2.5-flash')}">
+<p class="mt-2 text-xs text-sea/60">Alle Schlüssel liegen nur im localStorage dieses Geräts, nicht im Code.</p>
+<button data-a="saveCfg" class="btn mt-3 w-full">Speichern und neu verbinden</button>
+<h3 class="mt-6 font-semibold">PIN ändern</h3><div class="mt-1 flex gap-2"><input id="s-pin" type="password" class="inp" placeholder="Neue PIN"><button data-a="savePin" class="btn">Ändern</button></div>
+<p class="mt-2 text-xs text-sea/60">Die PIN ist ein Komfortschutz. Den eigentlichen Schutz bietet, dass URL und Key nicht im GitHub-Repo stehen.</p>
+<h3 class="mt-6 font-semibold">Einmalige Supabase-Einrichtung</h3><p class="text-sm text-sea/70">Im SQL Editor ausführen:</p><pre class="mt-1 overflow-x-auto rounded-xl bg-white p-3 text-xs">${h(SQL)}</pre>
+<button data-a="copySql" class="btn mt-2 w-full"><i data-lucide="copy"></i>SQL kopieren</button>
+<button data-a="logout" class="btn mt-6 w-full !bg-white !text-sea border border-sea/20"><i data-lucide="log-out"></i>Sperren</button>`;
+
+function vModal(){const m=ui.modal;if(!m)return '';let b='';
+ if(m.t==='item'){const i=m.id&&(plan().days[ui.day]||[]).find(x=>x.id===m.id)||{};
+ b=`<h3 class="font-display text-xl">${m.id?'Aktivität bearbeiten':'Neue Aktivität'} am ${dl(ui.day)}</h3>
+<label class="lbl" for="m-time">Uhrzeit</label><input id="m-time" type="time" class="inp" value="${h(i.time||'')}">
+<label class="lbl" for="m-title">Titel</label><input id="m-title" class="inp" value="${h(i.title||'')}">
+<label class="lbl" for="m-place">Ort für Google Maps</label><input id="m-place" class="inp" value="${h(i.place||'')}" placeholder="z. B. Sagrada Família, Barcelona">
+<label class="lbl" for="m-note">Notiz</label><textarea id="m-note" rows="2" class="inp">${h(i.note||'')}</textarea>
+<button data-a="saveItem" class="btn mt-4 w-full">Speichern</button>`}
+ else b=`<h3 class="font-display text-xl">KI-Assistent für „${h(plan().name)}“</h3>
+<label class="lbl" for="ai-w">Was möchtet ihr sehen oder erleben?</label><textarea id="ai-w" rows="4" class="inp" placeholder="z. B. Sagrada Família, Park Güell, Tapas, ein ruhiger Strandtag"></textarea>
+<label class="lbl" for="ai-t">Schon gebuchte Tickets mit Uhrzeit</label><textarea id="ai-t" rows="3" class="inp" placeholder="z. B. Sagrada Família am 21.10. um 11:00"></textarea>
+<label class="mt-3 flex items-center gap-2 text-sm"><input id="ai-r" type="checkbox" class="h-5 w-5 accent-[#1B8A9A]">Bestehende Einträge ersetzen</label>
+<button data-a="runAI" class="btn mt-4 w-full" ${ui.busy?'disabled':''}><i data-lucide="sparkles"></i>${ui.busy?'Routen werden geplant …':'Tagesrouten erstellen'}</button>`;
+ return `<div class="fixed inset-0 z-40 flex items-end bg-black/40 sm:items-center"><div class="mx-auto max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-salt p-5 sm:rounded-3xl" style="padding-bottom:calc(1.25rem + env(safe-area-inset-bottom,0px))"><button data-a="close" class="btn-ic float-right" aria-label="Schließen"><i data-lucide="x"></i></button>${b}</div></div>`}
+
+function render(){const r=$('#app');
+ r.innerHTML=sessionStorage.bcn_in?vHead()+`<main class="mx-auto max-w-xl px-4 pb-28 pt-4">${{plan:vPlan,tr:vTr,bud:vBud,pack:vPack,set:vSet}[ui.tab]()}</main>`+vNav()+vModal():vLogin();
+ lucide.createIcons();ui.pend=false}
+
+/* ---------- KI ---------- */
+async function runAI(){if(!cfg.gem)return toast('Bitte zuerst den Gemini-Key unter „Mehr“ eintragen');
+ const wish=$('#ai-w').value,tix=$('#ai-t').value,rep=$('#ai-r').checked;ui.busy=true;render();
+ const prompt=`Du bist Reiseplaner für Barcelona. Gruppe: 4 Personen. Unterkunft: ${HOTEL.addr}. Zeitraum 19.10.2026 bis 25.10.2026. Hinflug am 19.10. gegen 10:00 Uhr ab Prag (Ankunft in Barcelona ca. 2 Stunden später, danach Transfer und Check-in). Rückflug am 25.10. früh morgens: an diesem Tag nur die Abreise einplanen.
+Wünsche: ${wish||'allgemeine Highlights'}
+Bereits gebuchte Tickets (Zeiten sind fix): ${tix||'keine'}
+Aufgabe: Erstelle tagesgenaue Routen, geografisch sinnvoll gruppiert, mit kurzen Wegezeiten ab dem Hotel bzw. vom vorherigen Ort, realistischen Öffnungszeiten sowie Pausen und Essen. Nenne im Feld note die Anreise (Verkehrsmittel und Minuten). Antworte NUR mit JSON in diesem Format: {"days":[{"date":"YYYY-MM-DD","items":[{"time":"HH:MM","title":"","place":"Name und Adresse für Google Maps","note":""}]}]}`;
+ try{const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model||'gemini-2.5-flash'}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.gem},
+  body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json'}})});
+  const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
+  const out=JSON.parse(j.candidates[0].content.parts.map(p=>p.text||'').join('').replace(/```json|```/g,'').trim()),p=plan();
+  for(const dd of out.days||[]){if(!DAYS.includes(dd.date))continue;
+   const it=(dd.items||[]).map(i=>({id:uid(),done:false,time:i.time||'',title:i.title||'',place:i.place||'',note:i.note||''}));
+   p.days[dd.date]=rep?it:[...(p.days[dd.date]||[]),...it]}
+  ui.modal=null;toast('Plan erstellt')}catch(e){toast('KI-Fehler: '+e.message)}
+ ui.busy=false;save('plans')}
+
+/* ---------- Aktionen ---------- */
+const A={
+ async login(){cfg.url=$('#l-url').value.trim();cfg.key=$('#l-key').value.trim();localStorage.bcn_cfg=JSON.stringify(cfg);
+  const pin=$('#l-pin').value;if(pin.length<4){ui.err='Die PIN braucht mindestens 4 Zeichen.';return render()}
+  const hs=await sha(pin);
+  try{if(connect()){const {data,error}=await sb.from('trip_state').select('value').eq('key','pin').maybeSingle();if(error)throw error;
+   if(!data){const r=await sb.from('trip_state').upsert({key:'pin',value:hs});if(r.error)throw r.error}else if(data.value!==hs)throw new Error('Falsche PIN')}
+  else{sb=null;const l=localStorage.bcn_pin;if(!l)localStorage.bcn_pin=hs;else if(l!==hs)throw new Error('Falsche PIN')}}
+  catch(e){ui.err=e.message==='Falsche PIN'?'Falsche PIN.':'Verbindung fehlgeschlagen: '+e.message+' (Ist die Tabelle angelegt?)';sb=null;return render()}
+  ui.err='';sessionStorage.bcn_in='1';start()},
+ tab:d=>{ui.tab=d.t;ui.modal=null;render();scrollTo(0,0)},
+ plan:d=>{ui.plan=d.id;render()},day:d=>{ui.day=d.d;render()},
+ addPlan(){const n=prompt('Name des neuen Plans (z. B. „Mamas Wunschliste“):');if(!n)return;const p={id:uid(),name:n.trim(),days:{}};S.plans.push(p);ui.plan=p.id;save('plans')},
+ renPlan(){const n=prompt('Neuer Name:',plan().name);if(n){plan().name=n.trim();save('plans')}},
+ delPlan(){if(S.plans.length<2)return toast('Mindestens ein Plan muss bleiben');if(confirm(`Plan „${plan().name}“ löschen?`)){S.plans=S.plans.filter(p=>p!==plan());ui.plan=S.plans[0].id;save('plans')}},
+ toggle:d=>{const i=(plan().days[ui.day]||[]).find(x=>x.id===d.id);if(i){i.done=!i.done;save('plans')}},
+ delItem:d=>{const p=plan();p.days[ui.day]=(p.days[ui.day]||[]).filter(x=>x.id!==d.id);save('plans')},
+ item:d=>{ui.modal={t:'item',id:d.id||null};render()},
+ saveItem(){const p=plan(),l=p.days[ui.day]=p.days[ui.day]||[],v={time:$('#m-time').value,title:$('#m-title').value.trim(),place:$('#m-place').value.trim(),note:$('#m-note').value.trim()};
+  if(!v.title)return toast('Bitte einen Titel eingeben');const e=ui.modal.id;if(e)Object.assign(l.find(i=>i.id===e),v);else l.push({id:uid(),done:false,...v});ui.modal=null;save('plans')},
+ ai(){ui.modal={t:'ai'};render()},runAI,close(){ui.modal=null;render()},
+ trin:(d,el)=>{ui.tr[d.k]=Math.max(1,+el.value||1);render()},
+ addExp(){const w=$('#b-w').value.trim(),a=parseFloat($('#b-a').value);if(!w||!(a>0))return toast('Bitte Beschreibung und Betrag eingeben');
+  S.budget.items.push({id:uid(),what:w,amt:a,by:+$('#b-by').value});save('budget')},
+ delExp:d=>{S.budget.items=S.budget.items.filter(x=>x.id!==d.id);save('budget')},
+ renPerson:d=>{const n=prompt('Name:',S.budget.people[d.i]);if(n){S.budget.people[d.i]=n.trim();save('budget')}},
+ addPack(){const t=$('#p-t').value.trim();if(t){S.packing.push({id:uid(),t,d:false});save('packing')}},
+ togPack:d=>{const x=S.packing.find(i=>i.id===d.id);x.d=!x.d;save('packing')},
+ delPack:d=>{S.packing=S.packing.filter(i=>i.id!==d.id);save('packing')},
+ saveCfg(){cfg={url:$('#s-url').value.trim(),key:$('#s-key').value.trim(),gem:$('#s-gem').value.trim(),model:$('#s-model').value.trim()||'gemini-2.5-flash'};localStorage.bcn_cfg=JSON.stringify(cfg);location.reload()},
+ async savePin(){const p=$('#s-pin').value;if(p.length<4)return toast('Mindestens 4 Zeichen');const hs=await sha(p);
+  if(sb){const r=await sb.from('trip_state').upsert({key:'pin',value:hs});if(r.error)return toast(r.error.message)}else localStorage.bcn_pin=hs;toast('PIN geändert');$('#s-pin').value=''},
+ copySql(){navigator.clipboard.writeText(SQL).then(()=>toast('SQL kopiert'))},
+ logout(){sessionStorage.removeItem('bcn_in');location.reload()}
+};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||/INPUT|SELECT|TEXTAREA/.test(b.tagName))return;A[b.dataset.a]?.(b.dataset,b)});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.a&&/INPUT|SELECT|TEXTAREA/.test(t.tagName))A[t.dataset.a]?.(t.dataset,t)});
+document.addEventListener('focusout',()=>setTimeout(()=>{if(ui.pend&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){render();toast('Von Mitreisenden aktualisiert')}},150));
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='l-pin')A.login()});
+
+if(sessionStorage.bcn_in)start();else render();
+</script>
+</body>
+</html>
