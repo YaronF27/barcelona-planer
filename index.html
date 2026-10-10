@@ -48,7 +48,8 @@ alter table trip_state enable row level security;
 create policy "gruppe" on trip_state for all using (true) with check (true);
 alter publication supabase_realtime add table trip_state;`;
 
-let cfg=JSON.parse(localStorage.bcn_cfg||'{}'), sb=null, S={},
+const DEF={url:'https://tkvbbibxvrucaphmgraf.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrdmJiaWJ4dnJ1Y2FwaG1ncmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NjEzNDYsImV4cCI6MjEwNzIzNzM0Nn0.okQ_CvS2V-_KnbSwO_TSjEXteN1vZIhMNVshBm9FVtI',gem:'AQ.Ab8RN6I1ZCf03Ijb_qhazBxlAdgGGSabV1S6CHLIYR2_o3Aktg',model:'gemini-3.1-flash-lite'};
+let cfg={...DEF}, sb=null, S={},
 ui={tab:'plan',plan:null,day:DAYS[0],modal:null,sync:'local',err:'',busy:false,pend:false,tr:{p:4,days:6,r:4,hd:5}};
 
 const seed=()=>({
@@ -64,13 +65,14 @@ function toast(m){const t=$('#toast');t.textContent=m;t.classList.remove('hidden
 
 /* ---------- Supabase ---------- */
 function connect(){if(!cfg.url||!cfg.key)return false;try{sb=supabase.createClient(cfg.url,cfg.key);return true}catch{sb=null;return false}}
+const applyCfg=v=>{cfg.gem=v?.gem||DEF.gem;cfg.model=v?.model||DEF.model};
 async function pull(){const {data,error}=await sb.from('trip_state').select('key,value');if(error)throw error;
- data.forEach(r=>{if(r.key in S){S[r.key]=r.value;localStorage['bcn_'+r.key]=JSON.stringify(r.value)}});return data}
+ data.forEach(r=>{if(r.key==='config')applyCfg(r.value);else if(r.key in S){S[r.key]=r.value;localStorage['bcn_'+r.key]=JSON.stringify(r.value)}});return data}
 async function push(k){localStorage['bcn_'+k]=JSON.stringify(S[k]);if(!sb)return;
  const {error}=await sb.from('trip_state').upsert({key:k,value:S[k],updated_at:new Date().toISOString()});
  ui.sync=error?'err':'ok';if(error)toast('Speichern fehlgeschlagen: '+error.message);render()}
 function listen(){sb.channel('trip').on('postgres_changes',{event:'*',schema:'public',table:'trip_state'},p=>{
- const r=p.new;if(r&&r.key in S&&JSON.stringify(S[r.key])!==JSON.stringify(r.value)){S[r.key]=r.value;localStorage['bcn_'+r.key]=JSON.stringify(r.value);
+ const r=p.new;if(r&&r.key==='config'){applyCfg(r.value);return}if(r&&r.key in S&&JSON.stringify(S[r.key])!==JSON.stringify(r.value)){S[r.key]=r.value;localStorage['bcn_'+r.key]=JSON.stringify(r.value);
  const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&$('#app').contains(a))ui.pend=true;else{render();toast('Von Mitreisenden aktualisiert')}}}).subscribe()}
 const save=k=>{push(k);render()};
 
@@ -85,10 +87,7 @@ function vLogin(){return `<div class="mx-auto flex min-h-screen max-w-sm flex-co
 <p class="mt-1 text-xs text-white/60">Erster Start: Die PIN, die du jetzt eingibst, wird zur Gruppen-PIN.</p>
 ${ui.err?`<p class="mt-3 rounded-lg bg-white/15 p-2 text-sm">${h(ui.err)}</p>`:''}
 <button data-a="login" class="btn mt-5 w-full bg-sun !text-sea">Entsperren</button>
-<details class="mt-6 text-sm"><summary class="cursor-pointer text-white/80">Verbindung zu Supabase (optional)</summary>
-<label class="lbl" for="l-url">Project URL</label><input id="l-url" class="inp text-sea" value="${h(cfg.url||'')}" placeholder="https://xxxx.supabase.co">
-<label class="lbl" for="l-key">Anon / Public Key</label><input id="l-key" class="inp text-sea" value="${h(cfg.key||'')}">
-<p class="mt-3 text-white/70">Ohne Eintrag läuft die App nur auf diesem Gerät. SQL für die Einrichtung:</p><pre class="mt-1 overflow-x-auto rounded-lg bg-black/30 p-2 text-xs">${h(SQL)}</pre></details></div></div>`}
+</div></div>`}
 
 const vHead=()=>{const d=Math.ceil((new Date('2026-10-19T10:00')-new Date())/864e5),
  c=d>0?`Noch ${d} ${d==1?'Tag':'Tage'}`:new Date()<new Date('2026-10-26')?'Reise läuft':'Gute Heimreise';
@@ -132,14 +131,11 @@ return `<h2 class="font-display text-2xl">Packliste</h2><p class="text-sm text-s
 <ul class="mt-2">${l.map(x=>`<li class="flex items-center gap-3 border-b border-sea/10 py-2.5 ${x.d?'opacity-50':''}"><input type="checkbox" data-a="togPack" data-id="${x.id}" ${x.d?'checked':''} class="h-5 w-5 accent-[#1B8A9A]"><span class="flex-1 ${x.d?'line-through':''}">${h(x.t)}</span><button data-a="delPack" data-id="${x.id}" class="btn-ic" aria-label="Löschen"><i data-lucide="trash-2"></i></button></li>`).join('')}</ul>`}
 
 const vSet=()=>`<h2 class="font-display text-2xl">Einstellungen</h2>
-<h3 class="mt-4 font-semibold">Supabase (Echtzeit-Sync)</h3>
-<label class="lbl" for="s-url">Project URL</label><input id="s-url" class="inp" value="${h(cfg.url||'')}" placeholder="https://xxxx.supabase.co">
-<label class="lbl" for="s-key">Anon / Public Key</label><input id="s-key" class="inp" value="${h(cfg.key||'')}">
-<h3 class="mt-6 font-semibold">Gemini KI</h3>
+<h3 class="mt-4 font-semibold">Gemini KI (gilt für alle)</h3>
 <label class="lbl" for="s-gem">API-Key (Google AI Studio)</label><input id="s-gem" type="password" class="inp" value="${h(cfg.gem||'')}">
 <label class="lbl" for="s-model">Modell</label><input id="s-model" class="inp" value="${h(cfg.model||'gemini-2.5-flash')}">
-<p class="mt-2 text-xs text-sea/60">Alle Schlüssel liegen nur im localStorage dieses Geräts, nicht im Code.</p>
-<button data-a="saveCfg" class="btn mt-3 w-full">Speichern und neu verbinden</button>
+<p class="mt-2 text-xs text-sea/60">Änderungen werden in Supabase gespeichert und gelten sofort für alle Mitreisenden.</p>
+<button data-a="saveCfg" class="btn mt-3 w-full">Für alle speichern</button>
 <h3 class="mt-6 font-semibold">PIN ändern</h3><div class="mt-1 flex gap-2"><input id="s-pin" type="password" class="inp" placeholder="Neue PIN"><button data-a="savePin" class="btn">Ändern</button></div>
 <p class="mt-2 text-xs text-sea/60">Die PIN ist ein Komfortschutz. Den eigentlichen Schutz bietet, dass URL und Key nicht im GitHub-Repo stehen.</p>
 <h3 class="mt-6 font-semibold">Einmalige Supabase-Einrichtung</h3><p class="text-sm text-sea/70">Im SQL Editor ausführen:</p><pre class="mt-1 overflow-x-auto rounded-xl bg-white p-3 text-xs">${h(SQL)}</pre>
@@ -203,7 +199,7 @@ Antworte auf Deutsch, kompakt und ohne Einleitung: **Empfehlung** (bester Anbiet
 
 /* ---------- Aktionen ---------- */
 const A={
- async login(){cfg.url=$('#l-url').value.trim();cfg.key=$('#l-key').value.trim();localStorage.bcn_cfg=JSON.stringify(cfg);
+ async login(){
   const pin=$('#l-pin').value;if(pin.length<4){ui.err='Die PIN braucht mindestens 4 Zeichen.';return render()}
   const hs=await sha(pin);
   try{if(connect()){const {data,error}=await sb.from('trip_state').select('value').eq('key','pin').maybeSingle();if(error)throw error;
@@ -228,7 +224,8 @@ const A={
  addPack(){const t=$('#p-t').value.trim();if(t){S.packing.push({id:uid(),t,d:false});save('packing')}},
  togPack:d=>{const x=S.packing.find(i=>i.id===d.id);x.d=!x.d;save('packing')},
  delPack:d=>{S.packing=S.packing.filter(i=>i.id!==d.id);save('packing')},
- saveCfg(){cfg={url:$('#s-url').value.trim(),key:$('#s-key').value.trim(),gem:$('#s-gem').value.trim(),model:$('#s-model').value.trim()||'gemini-2.5-flash'};localStorage.bcn_cfg=JSON.stringify(cfg);location.reload()},
+ async saveCfg(){const v={gem:$('#s-gem').value.trim(),model:$('#s-model').value.trim()};applyCfg(v);
+  if(sb){const r=await sb.from('trip_state').upsert({key:'config',value:v});if(r.error)return toast('Speichern fehlgeschlagen: '+r.error.message)}toast('Gespeichert, gilt für alle');render()},
  async savePin(){const p=$('#s-pin').value;if(p.length<4)return toast('Mindestens 4 Zeichen');const hs=await sha(p);
   if(sb){const r=await sb.from('trip_state').upsert({key:'pin',value:hs});if(r.error)return toast(r.error.message)}else localStorage.bcn_pin=hs;toast('PIN geändert');$('#s-pin').value=''},
  copySql(){navigator.clipboard.writeText(SQL).then(()=>toast('SQL kopiert'))},
