@@ -6,12 +6,12 @@
 <meta name="theme-color" content="#0B3954">
 <title>Barcelona 2026</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script>tailwind.config={theme:{extend:{colors:{sea:'#0B3954',az:'#1B8A9A',sun:'#F4B63F',salt:'#F3F7F8'}}}}</script>
+<script>tailwind.config={theme:{extend:{colors:{sea:'rgb(var(--sea) / <alpha-value>)',az:'rgb(var(--az) / <alpha-value>)',sun:'rgb(var(--sun) / <alpha-value>)',salt:'rgb(var(--salt) / <alpha-value>)'}}}}</script>
 <script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style type="text/tailwindcss">
-@layer base{html,body{background:#F3F7F8;color:#0B3954;font-family:Inter,system-ui,sans-serif}.font-display{font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:800}}
+@layer base{html,body{background:rgb(var(--salt));color:rgb(var(--sea));font-family:Inter,system-ui,sans-serif}.font-display{font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:800}}
 @layer components{
 .chip{@apply shrink-0 rounded-full border border-sea/20 bg-white px-4 py-2 text-sm font-semibold whitespace-nowrap}
 .chip.on{@apply bg-sea text-white border-sea}
@@ -21,7 +21,7 @@
 .inp{@apply w-full rounded-xl border border-sea/20 bg-white px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-az}
 .lbl{@apply mb-1 mt-3 block text-sm font-semibold}
 }
-:root{padding-top:env(safe-area-inset-top,0px)}
+:root{--sea:11 57 84;--az:27 138 154;--sun:244 182 63;--salt:243 247 248;padding-top:env(safe-area-inset-top,0px)}
 </style>
 </head>
 <body>
@@ -50,7 +50,7 @@ alter publication supabase_realtime add table trip_state;`;
 
 const DEF={url:'https://tkvbbibxvrucaphmgraf.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrdmJiaWJ4dnJ1Y2FwaG1ncmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NjEzNDYsImV4cCI6MjEwNzIzNzM0Nn0.okQ_CvS2V-_KnbSwO_TSjEXteN1vZIhMNVshBm9FVtI',gem:'AQ.Ab8RN6I1ZCf03Ijb_qhazBxlAdgGGSabV1S6CHLIYR2_o3Aktg',model:'gemini-3.8-flash'};
 let cfg={...DEF}, sb=null, S={},
-ui={auto:new Set(),msgs:[],hist:[],chat:false,cb:false,noLoc:false,tab:'plan',plan:null,day:DAYS[0],modal:null,sync:'local',err:'',busy:false,pend:false,tr:{p:4,days:6,r:4,hd:5}};
+ui={auto:new Set(),msgs:(()=>{try{return JSON.parse(localStorage.bcn_chat||'[]')}catch{return[]}})(),chat:false,cb:false,noLoc:false,tab:'plan',plan:null,day:DAYS[0],modal:null,sync:'local',err:'',busy:false,pend:false,tr:{p:4,days:6,r:4,hd:5}};
 
 const seed=()=>({
  plans:[{id:uid(),name:'Hauptplan der Gruppe',days:{
@@ -65,7 +65,7 @@ function toast(m){const t=$('#toast');t.textContent=m;t.classList.remove('hidden
 
 /* ---------- Supabase ---------- */
 function connect(){if(!cfg.url||!cfg.key)return false;try{sb=supabase.createClient(cfg.url,cfg.key);return true}catch{sb=null;return false}}
-const applyCfg=v=>{cfg.gem=v?.gem||DEF.gem;cfg.model=v?.model||DEF.model};
+const applyCfg=v=>{cfg.gem=v?.gem||DEF.gem;cfg.model=v?.model||DEF.model;cfg.theme=v?.theme||null;applyTheme(cfg.theme)};
 async function pull(){const {data,error}=await sb.from('trip_state').select('key,value');if(error)throw error;
  data.forEach(r=>{if(r.key==='config')applyCfg(r.value);else if(r.key in S){S[r.key]=r.value;localStorage['bcn_'+r.key]=JSON.stringify(r.value)}});return data}
 async function push(k){localStorage['bcn_'+k]=JSON.stringify(S[k]);if(!sb)return;
@@ -105,10 +105,10 @@ return `<div class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2">${S.plans.map(x=
 <div class="mt-3 flex items-center justify-between"><h2 class="font-display text-2xl">${h(p.name)}</h2><div class="flex"><button data-a="ai" class="btn-ic bg-sun" aria-label="KI-Assistent"><i data-lucide="sparkles"></i></button><button data-a="renPlan" class="btn-ic" aria-label="Umbenennen"><i data-lucide="pencil"></i></button><button data-a="delPlan" class="btn-ic" aria-label="Plan löschen"><i data-lucide="trash-2"></i></button></div></div>
 <a href="${maps(HOTEL.addr)}" target="_blank" rel="noopener" class="mt-3 flex items-center gap-3 rounded-2xl bg-az p-3 text-white"><i data-lucide="map-pin"></i><span class="flex-1"><b>${HOTEL.name}</b><br><span class="text-sm text-white/80">Pla de Palau, 19: In Google Maps öffnen</span></span><i data-lucide="external-link" class="h-4 w-4"></i></a>
 <div class="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-2">${DAYS.map(d=>`<button data-a="day" data-d="${d}" class="chip ${d===ui.day?'on':''}">${dl(d)}${(p.days[d]||[]).length?` (${p.days[d].length})`:''}</button>`).join('')}</div>
-${its.length?`<p class="mt-2 text-sm text-sea/70">${dn} von ${its.length} erledigt</p>`:''}
+${p.titles?.[ui.day]?`<p class="font-display mt-2 text-lg">${h(p.titles[ui.day])}</p>`:''}${its.length?`<p class="mt-2 text-sm text-sea/70">${dn} von ${its.length} erledigt</p>`:''}
 <ul class="mt-1">${its.map(i=>`<li class="flex items-start gap-3 border-b border-sea/10 py-3 ${i.done?'opacity-50':''}"><input type="checkbox" data-a="toggle" data-id="${i.id}" ${i.done?'checked':''} class="mt-1 h-5 w-5 shrink-0 accent-[#1B8A9A]" aria-label="Erledigt">
-<div class="font-display w-12 shrink-0 text-sea">${h(i.time||'–')}</div><div class="min-w-0 flex-1"><div class="font-semibold ${i.done?'line-through':''}">${h(i.title)}</div>${i.note?`<div class="text-sm text-sea/70">${h(i.note)}</div>`:''}
-<a href="${maps(i.place||i.title+' Barcelona')}" target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-az"><i data-lucide="map-pin" class="h-4 w-4"></i>In Google Maps öffnen</a><button data-a="info" data-id="${i.id}" class="ml-4 mt-1 inline-flex items-center gap-1 text-sm font-semibold text-sea"><i data-lucide="sparkles" class="h-4 w-4"></i>${ui.auto.has(i.id)?'KI recherchiert …':i.info?'Infos ansehen':'KI-Infos'}</button></div>
+<div class="font-display w-12 shrink-0 text-sea">${h(i.time||'–')}</div><div class="min-w-0 flex-1"><div class="font-semibold ${i.done?'line-through':''}">${i.icon?h(i.icon)+' ':''}${h(i.title)}</div>${i.note?`<div class="text-sm text-sea/70">${h(i.note)}</div>`:''}
+<a href="${maps(i.place||i.title+' Barcelona')}" target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-az"><i data-lucide="map-pin" class="h-4 w-4"></i>In Google Maps öffnen</a><button data-a="info" data-id="${i.id}" class="ml-4 mt-1 inline-flex items-center gap-1 text-sm font-semibold text-sea"><i data-lucide="sparkles" class="h-4 w-4"></i>${ui.auto.has(i.id)?'KI recherchiert …':i.info?'Infos ansehen':'KI-Infos'}</button>${i.link?`<a href="${h(i.link)}" target="_blank" rel="noopener" class="ml-4 mt-1 inline-flex items-center gap-1 rounded-full bg-az px-3 py-1 text-sm font-semibold text-white"><i data-lucide="ticket" class="h-4 w-4"></i>${h(i.ll||'Buchen')}</a>`:''}</div>
 <button data-a="item" data-id="${i.id}" class="btn-ic" aria-label="Bearbeiten"><i data-lucide="pencil"></i></button><button data-a="delItem" data-id="${i.id}" class="btn-ic" aria-label="Löschen"><i data-lucide="trash-2"></i></button></li>`).join('')||'<p class="py-6 text-sea/60">Für diesen Tag ist noch nichts geplant. Füge etwas hinzu oder lass den KI-Assistenten planen.</p>'}</ul>
 <button data-a="item" class="btn mt-4 w-full"><i data-lucide="plus"></i>Aktivität hinzufügen</button>`}
 
@@ -149,6 +149,7 @@ function vModal(){const m=ui.modal;if(!m)return '';let b='';
 <label class="lbl" for="m-time">Uhrzeit</label><input id="m-time" type="time" class="inp" value="${h(i.time||'')}">
 <label class="lbl" for="m-title">Titel</label><input id="m-title" class="inp" value="${h(i.title||'')}">
 <label class="lbl" for="m-place">Ort für Google Maps</label><input id="m-place" class="inp" value="${h(i.place||'')}" placeholder="z. B. Sagrada Família, Barcelona">
+<label class="lbl" for="m-link">Buchungslink (optional)</label><input id="m-link" class="inp" value="${h(i.link||'')}" placeholder="https://…">
 <label class="lbl" for="m-note">Notiz</label><textarea id="m-note" rows="2" class="inp">${h(i.note||'')}</textarea>
 <button data-a="saveItem" class="btn mt-4 w-full">Speichern</button>`}
  else if(m.t==='info')b=vInfo(m.id);
@@ -180,11 +181,16 @@ Aufgabe: Erstelle tagesgenaue Routen, geografisch sinnvoll gruppiert, mit kurzen
   ui.modal=null;toast('Plan erstellt')}catch(e){toast('KI-Fehler: '+e.message)}
  ui.busy=false;save('plans')}
 
-const fmt=t=>h(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').split('\n').map(l=>/^\s*[-*] /.test(l)?`<div class="mt-1 flex gap-2"><span>•</span><span>${l.replace(/^\s*[-*] /,'')}</span></div>`:l.trim()?`<p class="mt-2">${l}</p>`:'').join('');
+const fmt=t=>h(t).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-full bg-az px-3 py-1 font-semibold text-white">$1 ↗</a>').replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g,'$1<a href="$2" target="_blank" rel="noopener" class="text-az underline">$2</a>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').split('\n').map(l=>/^\s*[-*] /.test(l)?`<div class="mt-1 flex gap-2"><span>•</span><span>${l.replace(/^\s*[-*] /,'')}</span></div>`:l.trim()?`<p class="mt-2">${l}</p>`:'').join('');
+const hex2=x=>{const m=/^#?([0-9a-f]{6})$/i.exec(x||'');return m?[0,2,4].map(i=>parseInt(m[1].slice(i,i+2),16)).join(' '):null},
+saveChat=()=>{try{localStorage.bcn_chat=JSON.stringify(ui.msgs.slice(-40))}catch{}},
+histOf=()=>{const a=ui.msgs.filter(m=>m.t).slice(-20).map(m=>({role:m.r==='u'?'user':'model',parts:[{text:m.t}]}));while(a[0]&&a[0].role==='model')a.shift();return a},
+saveCfgShared=async()=>{if(!sb)return;const r=await sb.from('trip_state').upsert({key:'config',value:{gem:cfg.gem,model:cfg.model,theme:cfg.theme}});if(r.error)throw r.error};
+function applyTheme(t){const r=document.documentElement.style;for(const k of['sea','az','sun','salt']){const v=t&&hex2(t[k]);if(v)r.setProperty('--'+k,v);else r.removeProperty('--'+k)}}
 const CTX=`Familie mit 4 Personen, Unterkunft ${HOTEL.addr}, Reisezeit 19. bis 25.10.2026`,
 findIt=(pid,day,id)=>{const p=S.plans.find(x=>x.id===pid);return[p,(p?.days[day]||[]).find(x=>x.id===id)]},
 infoPrompt=(it,day)=>`Du bist Reiseberater für Barcelona (${CTX}). Recherchiere aktuell im Web zu diesem Programmpunkt: "${it.title}"${it.place?` (Ort bzw. Einstiegspunkt: ${it.place})`:''}${it.time?`, geplante Uhrzeit ${it.time}`:''} am ${dl(day)}. Notiz: ${it.note||'keine'}.${it.q?` Besonderer Wunsch: ${it.q}`:''}
-Antworte auf Deutsch, kompakt und ohne Einleitung: **Empfehlung** (bester Anbieter bzw. beste Option mit kurzer Begründung, bei mehreren Anbietern ein kurzer Vergleich), **Preise** für 4 Personen, **Zeiten** (Abfahrts- bzw. Öffnungszeiten genau für den Einstiegspunkt bzw. Ort im Oktober), **Anfahrt** vom Hotel, **Tipps** (Vorab-Buchung, beste Uhrzeit, Wartezeit). Wenn du etwas nicht sicher findest, schreibe das ausdrücklich und nenne die offizielle Webseite. Nutze **Fettdruck** für Überschriften und Listen mit "- ".`;
+Antworte auf Deutsch, kompakt und ohne Einleitung: **Empfehlung** (bester Anbieter bzw. beste Option mit kurzer Begründung, bei mehreren Anbietern ein kurzer Vergleich), **Preise** für 4 Personen, **Zeiten** (Abfahrts- bzw. Öffnungszeiten genau für den Einstiegspunkt bzw. Ort im Oktober), **Anfahrt** vom Hotel, **Tipps** (Vorab-Buchung, beste Uhrzeit, Wartezeit). Beende die Antwort mit einer eigenen Zeile **Buchen:** [Beschriftung](URL) mit dem offiziellen Buchungslink aus den Suchergebnissen (keine erfundenen Links). Wenn die URL Datum, Uhrzeit oder Personenzahl als Parameter unterstützt, trage ${dl(day)} (${day}), ${it.time||'eine passende Uhrzeit'} und 4 Personen schon ein; sonst schreibe unter den Link, was auf der Buchungsseite einzutragen ist (Datum, Uhrzeit, 4 Personen). Wenn du etwas nicht sicher findest, schreibe das ausdrücklich und nenne die offizielle Webseite. Nutze **Fettdruck** für Überschriften und Listen mit "- ".`;
 
 async function gem(body,model){const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model||cfg.model}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.gem},body:JSON.stringify(body)});
  const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);return j}
@@ -197,53 +203,61 @@ async function ask(prompt){const body={contents:[{role:'user',parts:[{text:promp
 
 function vInfo(id){const it=findIt(ui.plan,ui.day,id)[1]||{},f=it.info,busy=ui.auto.has(id),q=encodeURIComponent(it.place||it.title+' Barcelona');
  return `<h3 class="font-display text-xl">${h(it.title)}</h3>
-<iframe loading="lazy" class="mt-3 h-40 w-full rounded-xl border border-sea/10" src="https://maps.google.com/maps?q=${q}&amp;output=embed"></iframe>
+<iframe loading="lazy" class="mt-3 h-40 w-full rounded-xl border border-sea/10" src="https://maps.google.com/maps?q=${q}&amp;output=embed"></iframe>${it.link?`<a href="${h(it.link)}" target="_blank" rel="noopener" class="btn mt-3 w-full"><i data-lucide="ticket"></i>${h(it.ll||'Jetzt buchen')}</a>`:''}
 <label class="lbl" for="i-q">${f?'Weitere Frage zu diesem Punkt':'Eigener Wunsch (optional)'}</label><input id="i-q" class="inp" value="${f?'':h(it.q||'')}" placeholder="${f?'z. B. Welche Haltestelle ist am nächsten?':'z. B. Abfahrtszeiten ab Plaça de Catalunya'}">
 <div class="mt-3 flex gap-2">${f?`<button data-a="askInfo" data-id="${h(id)}" class="btn flex-1" ${busy?'disabled':''}><i data-lucide="message-circle"></i>Fragen</button><button data-a="runInfo" data-id="${h(id)}" class="btn flex-1 !bg-white !text-sea border border-sea/20" ${busy?'disabled':''}>Neu recherchieren</button>`:`<button data-a="runInfo" data-id="${h(id)}" class="btn w-full" ${busy?'disabled':''}><i data-lucide="sparkles"></i>Infos und Empfehlungen holen</button>`}</div>
 ${busy?'<p class="mt-3 text-sm text-sea/70">KI recherchiert …</p>':''}
-${f?`<div class="mt-4 rounded-2xl bg-white p-4 text-sm leading-relaxed">${fmt(f.text)}</div>${(it.qa||[]).map(x=>`<div class="mt-3 rounded-2xl bg-sea/5 p-3 text-sm"><b>${h(x.q)}</b>${fmt(x.a)}</div>`).join('')}${f.src?.length?`<p class="mt-3 text-sm font-semibold">Quellen</p>${f.src.map(s=>`<a href="${h(s.u)}" target="_blank" rel="noopener" class="mt-1 block truncate text-sm text-az">${h(s.t||s.u)}</a>`).join('')}`:''}<p class="mt-3 text-xs text-sea/60">${f.web===false?`Ohne Live-Websuche erstellt${f.err?' (Google: '+h(f.err.slice(0,140))+')':''}. `:''}KI-Angaben können veraltet sein. Zeiten und Preise bitte beim Anbieter prüfen.</p>`:''}`}
+${f?`<div class="mt-4 rounded-2xl bg-white p-4 text-sm leading-relaxed">${fmt(f.text)}</div>${(it.qa||[]).map((x,k)=>`<div class="mt-3 rounded-2xl bg-sea/5 p-3 text-sm"><button data-a="delQa" data-id="${h(id)}" data-i="${k}" class="btn-ic float-right !p-1" aria-label="Antwort löschen"><i data-lucide="trash-2"></i></button><b>${h(x.q)}</b>${fmt(x.a)}</div>`).join('')}${f.src?.length?`<p class="mt-3 text-sm font-semibold">Quellen</p>${f.src.map(s=>`<a href="${h(s.u)}" target="_blank" rel="noopener" class="mt-1 block truncate text-sm text-az">${h(s.t||s.u)}</a>`).join('')}`:''}<button data-a="delInfo" data-id="${h(id)}" class="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-red-700"><i data-lucide="trash-2" class="h-4 w-4"></i>Recherche löschen</button><p class="mt-3 text-xs text-sea/60">${f.web===false?`Ohne Live-Websuche erstellt${f.err?' (Google: '+h(f.err.slice(0,140))+')':''}. `:''}KI-Angaben können veraltet sein. Zeiten und Preise bitte beim Anbieter prüfen.</p>`:''}`}
 
 async function getInfo(pid,day,id,q,follow){const it=findIt(pid,day,id)[1];if(!it||!cfg.gem)return;ui.auto.add(id);render();
- try{if(follow&&it.info){const r=await ask(`Du bist Reiseberater für Barcelona (${CTX}). Programmpunkt: "${it.title}" (${it.place||'kein Ort'}). Bisherige Recherche:\n${it.info.text}\nWeitere Frage: ${q}\nAntworte kurz und konkret auf Deutsch und recherchiere bei Bedarf aktuell im Web.`);(it.qa=it.qa||[]).push({q,a:r.text})}
- else{const r=await ask(infoPrompt(it,day));it.info={text:r.text,src:r.src,web:r.web,err:r.err||'',ts:Date.now()}}}
+ try{if(follow&&it.info){const r=await ask(`Du bist Reiseberater für Barcelona (${CTX}). Programmpunkt: "${it.title}" (${it.place||'kein Ort'}). Bisherige Recherche:\n${it.info.text}\nWeitere Frage: ${q}\nAntworte kurz und konkret auf Deutsch und recherchiere bei Bedarf aktuell im Web. Wenn es um eine Buchung geht, gib einen Markdown-Link [Beschriftung](URL) mit einer echten URL aus den Suchergebnissen und nenne Datum, Uhrzeit und 4 Personen zum Eintragen (bzw. trage sie in die URL ein, falls unterstützt).`);(it.qa=it.qa||[]).push({q,a:r.text})}
+ else{const r=await ask(infoPrompt(it,day));it.info={text:r.text,src:r.src,web:r.web,err:r.err||'',ts:Date.now()};const m=/Buchen:?\*{0,2}:?\s*\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/.exec(r.text);if(m&&!it.link){it.link=m[2];it.ll=m[1]}}}
  catch(e){toast('KI-Fehler: '+e.message)}
  ui.auto.delete(id);save('plans')}
 
 /* ---------- Live-Assistent ---------- */
 const S_=d=>({type:'string',description:d}),
-ITEM={type:'object',properties:{time:S_('Uhrzeit HH:MM'),title:S_('Titel'),place:S_('Ort bzw. Adresse für Google Maps'),note:S_('Notiz mit Anreise')},required:['title']},
+ITEM={type:'object',properties:{time:S_('Uhrzeit HH:MM'),title:S_('Titel'),place:S_('Ort bzw. Adresse für Google Maps'),note:S_('Notiz mit Anreise'),icon:S_('Emoji'),link:S_('Buchungslink (https)'),link_label:S_('Linktext')},required:['title']},
 OBJ=(properties,required)=>({type:'object',properties,required}),
 FD=[
- {name:'add_item',description:'Aktivität zu einem Tag hinzufügen',parameters:OBJ({plan_id:S_('Plan-ID, leer = aktiver Plan'),date:S_('Datum YYYY-MM-DD'),time:S_('Uhrzeit HH:MM'),title:S_('Titel'),place:S_('Ort bzw. Adresse für Google Maps'),note:S_('Notiz')},['date','title'])},
- {name:'update_item',description:'Aktivität ändern oder auf einen anderen Tag verschieben',parameters:OBJ({id:S_('ID der Aktivität'),date:S_('neues Datum, optional'),time:S_('Uhrzeit'),title:S_('Titel'),place:S_('Ort'),note:S_('Notiz'),done:{type:'boolean',description:'erledigt'}},['id'])},
+ {name:'add_item',description:'Aktivität zu einem Tag hinzufügen',parameters:OBJ({plan_id:S_('Plan-ID, leer = aktiver Plan'),date:S_('Datum YYYY-MM-DD'),time:S_('Uhrzeit HH:MM'),title:S_('Titel'),place:S_('Ort bzw. Adresse für Google Maps'),note:S_('Notiz'),icon:S_('passendes Emoji'),link:S_('Buchungs- oder Info-Link (https)'),link_label:S_('Beschriftung des Links')},['date','title'])},
+ {name:'update_item',description:'Aktivität ändern oder auf einen anderen Tag verschieben',parameters:OBJ({id:S_('ID der Aktivität'),date:S_('neues Datum, optional'),time:S_('Uhrzeit'),title:S_('Titel'),place:S_('Ort'),note:S_('Notiz'),done:{type:'boolean',description:'erledigt'},icon:S_('Emoji'),link:S_('Link, leer = entfernen'),link_label:S_('Beschriftung des Links')},['id'])},
  {name:'delete_item',description:'Aktivität löschen',parameters:OBJ({id:S_('ID der Aktivität')},['id'])},
  {name:'replace_day',description:'Einen ganzen Tag neu planen (ersetzt alle Einträge des Tages)',parameters:OBJ({plan_id:S_('Plan-ID, leer = aktiver Plan'),date:S_('Datum YYYY-MM-DD'),items:{type:'array',items:ITEM}},['date','items'])},
  {name:'add_plan',description:'Neuen Plan-Tab anlegen',parameters:OBJ({name:S_('Name des Plans')},['name'])},
  {name:'show_map',description:'Zeigt dem Nutzer eine Karte bzw. Route im Chat',parameters:OBJ({place:S_('Ziel'),from_place:S_('Start, leer = aktueller Standort')},['place'])},
- {name:'search_web',description:'Aktuelle Infos per Websuche (Zeiten, Preise, Anbieter)',parameters:OBJ({query:S_('Suchfrage')},['query'])}],
+ {name:'search_web',description:'Aktuelle Infos per Websuche (Zeiten, Preise, Anbieter)',parameters:OBJ({query:S_('Suchfrage')},['query'])},
+ {name:'rename_plan',description:'Plan-Tab umbenennen',parameters:OBJ({plan_id:S_('Plan-ID, leer = aktiver Plan'),name:S_('neuer Name')},['name'])},
+ {name:'delete_plan',description:'Plan-Tab löschen (nur auf ausdrücklichen Wunsch)',parameters:OBJ({plan_id:S_('Plan-ID')},['plan_id'])},
+ {name:'set_day_title',description:'Überschrift für einen Tag setzen, z. B. Gaudí-Tag',parameters:OBJ({plan_id:S_('Plan-ID, leer = aktiver Plan'),date:S_('Datum YYYY-MM-DD'),title:S_('Titel')},['date','title'])},
+ {name:'set_theme',description:'Farbschema der App für alle ändern (Hex-Farben wie #0B3954) oder zurücksetzen',parameters:OBJ({sea:S_('dunkle Hauptfarbe, Hex'),az:S_('Akzentfarbe, Hex'),sun:S_('Highlight-Farbe, Hex'),salt:S_('heller Hintergrund, Hex'),reset:{type:'boolean',description:'Standard wiederherstellen'}})}],
 QUICK=['Wohin muss ich als Nächstes und wie komme ich hin?','Wie komme ich zum Hotel zurück?','Was können wir heute noch machen?','Plane Tag 3 neu mit mehr Pausen'],
 pl=a=>S.plans.find(x=>x.id===a.plan_id)||plan(),
-newIt=i=>({id:uid(),done:false,time:i.time||'',title:i.title||'',place:i.place||'',note:i.note||''}),
+newIt=i=>({id:uid(),done:false,time:i.time||'',title:i.title||'',place:i.place||'',note:i.note||'',icon:i.icon||'',link:/^https?:\/\//.test(i.link||'')?i.link:'',ll:i.link_label||''}),
 RUN={
  add_item:(a,c)=>{if(!DAYS.includes(a.date))return{error:'Datum nur 2026-10-19 bis 2026-10-25'};const p=pl(a),i=newIt(a);(p.days[a.date]=p.days[a.date]||[]).push(i);c.log.push(`Hinzugefügt: ${a.title} (${dl(a.date)})`);return{ok:true,id:i.id}},
- update_item:(a,c)=>{for(const p of S.plans)for(const d in p.days){const l=p.days[d],i=l.find(x=>x.id===a.id);if(i){['time','title','place','note'].forEach(k=>{if(a[k]!=null)i[k]=a[k]});if(a.done!=null)i.done=a.done;
+ update_item:(a,c)=>{for(const p of S.plans)for(const d in p.days){const l=p.days[d],i=l.find(x=>x.id===a.id);if(i){['time','title','place','note'].forEach(k=>{if(a[k]!=null)i[k]=a[k]});if(a.done!=null)i.done=a.done;if(a.icon!=null)i.icon=a.icon;if(a.link!=null&&(a.link===''||/^https?:\/\//.test(a.link)))i.link=a.link;if(a.link_label!=null)i.ll=a.link_label;
   if(a.date&&a.date!==d&&DAYS.includes(a.date)){l.splice(l.indexOf(i),1);(p.days[a.date]=p.days[a.date]||[]).push(i)}c.log.push(`Geändert: ${i.title}`);return{ok:true}}}return{error:'ID nicht gefunden'}},
  delete_item:(a,c)=>{for(const p of S.plans)for(const d in p.days){const i=p.days[d].find(x=>x.id===a.id);if(i){p.days[d]=p.days[d].filter(x=>x!==i);c.log.push(`Gelöscht: ${i.title}`);return{ok:true}}}return{error:'ID nicht gefunden'}},
  replace_day:(a,c)=>{if(!DAYS.includes(a.date))return{error:'Datum nur 2026-10-19 bis 2026-10-25'};pl(a).days[a.date]=(a.items||[]).map(newIt);c.log.push(`Tag neu geplant: ${dl(a.date)}`);return{ok:true}},
  add_plan:(a,c)=>{const p={id:uid(),name:a.name,days:{}};S.plans.push(p);c.log.push(`Neuer Plan: ${a.name}`);return{ok:true,plan_id:p.id}},
  show_map:(a,c)=>{c.cards.push({to:a.place,from:a.from_place||(c.loc?`${c.loc.lat},${c.loc.lng}`:'')});return{ok:true}},
- search_web:async a=>{try{const r=await ask(a.query+' (Barcelona, Oktober 2026; knapp und mit Fakten antworten)');return{text:r.text,live:r.web,hinweis:r.web?'':'KEINE Live-Websuche möglich (Google-Kontingent). Sage dem Nutzer ausdrücklich, dass die Angaben nicht aktuell geprüft sind.'}}catch(e){return{error:e.message}}}};
+ rename_plan:(a,c)=>{const p=pl(a);p.name=a.name;c.log.push(`Plan umbenannt: ${a.name}`);return{ok:true}},
+ delete_plan:(a,c)=>{if(S.plans.length<2)return{error:'Mindestens ein Plan muss bleiben'};const p=pl(a);S.plans=S.plans.filter(x=>x!==p);if(ui.plan===p.id)ui.plan=S.plans[0].id;c.log.push(`Plan gelöscht: ${p.name}`);return{ok:true}},
+ set_day_title:(a,c)=>{if(!DAYS.includes(a.date))return{error:'Datum ungültig'};const p=pl(a);(p.titles=p.titles||{})[a.date]=a.title;c.log.push(`Tagestitel: ${dl(a.date)}`);return{ok:true}},
+ set_theme:async(a,c)=>{const t=a.reset?{}:{...(cfg.theme||{})};for(const k of['sea','az','sun','salt'])if(hex2(a[k]))t[k]=a[k];cfg.theme=Object.keys(t).length?t:null;applyTheme(cfg.theme);try{await saveCfgShared()}catch(e){return{error:e.message}}c.log.push(a.reset?'Farbschema zurückgesetzt':'Farbschema geändert');return{ok:true}},
+ search_web:async a=>{try{const r=await ask(a.query+' (Barcelona, Oktober 2026; knapp und mit Fakten antworten)');return{text:r.text,quellen:(r.src||[]).map(x=>`${x.t}: ${x.u}`),live:r.web,hinweis:r.web?'':'KEINE Live-Websuche möglich (Google-Kontingent). Sage dem Nutzer ausdrücklich, dass die Angaben nicht aktuell geprüft sind.'}}catch(e){return{error:e.message}}}};
 
 const getLoc=()=>new Promise(r=>{if(!navigator.geolocation||ui.noLoc)return r(null);navigator.geolocation.getCurrentPosition(p=>r({lat:+p.coords.latitude.toFixed(5),lng:+p.coords.longitude.toFixed(5)}),()=>r(null),{timeout:6000,maximumAge:60000})});
 function sysPrompt(loc){const n=new Date(),today=n.toLocaleDateString('sv-SE',{timeZone:'Europe/Madrid'}),tm=n.toLocaleString('de-DE',{timeZone:'Europe/Madrid',weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}),
- plans=S.plans.map(p=>({plan_id:p.id,name:p.name,tage:Object.fromEntries(Object.entries(p.days).map(([d,l])=>[d,sorted(l).map(i=>({id:i.id,zeit:i.time,titel:i.title,ort:i.place,notiz:i.note,erledigt:i.done,infos:i.info?.text?.slice(0,400)}))]))}));
+ plans=S.plans.map(p=>({plan_id:p.id,name:p.name,tage:Object.fromEntries(Object.entries(p.days).map(([d,l])=>[d,sorted(l).map(i=>({id:i.id,zeit:i.time,titel:i.title,ort:i.place,notiz:i.note,erledigt:i.done,link:i.link,infos:i.info?.text?.slice(0,400)}))]))}));
  return `Du bist der Live-Reiseassistent einer Familie (4 Personen) in Barcelona (Reise 19.–25.10.2026, Flug ab Prag). Unterkunft: ${HOTEL.addr}. Aktuell: ${tm} (Ortszeit Barcelona, heutiges Datum ${today}). Standort: ${loc?`${loc.lat}, ${loc.lng} (GPS des Handys)`:'unbekannt (frage bei Bedarf nach dem Startpunkt)'}. Aktiver Plan: ${plan().name} (${plan().id}).
 PLANUNG (JSON): ${JSON.stringify(plans)}
-Regeln: Antworte auf Deutsch, kurz und konkret. Bei Fragen wie "Wohin als Nächstes?" nimm den ersten nicht erledigten Punkt von heute (nach Uhrzeit) im aktiven Plan, nenne Ort, Uhrzeit und die genaue Anreise ab Standort (Verkehrsmittel, Linie, Haltestelle, Minuten) und rufe zusätzlich show_map mit dem Ziel auf. Nutze search_web für aktuelle Zeiten, Preise und Anbieter. Du darfst die Planung ändern (add_item, update_item, delete_item, replace_day, add_plan), wenn der Nutzer es wünscht oder klar meint, und beschreibst danach kurz, was du geändert hast. Datumsformat YYYY-MM-DD, nur 2026-10-19 bis 2026-10-25. Erfinde keine Zeiten oder Preise.`}
+Regeln: Antworte auf Deutsch, kurz und konkret. Bei Fragen wie "Wohin als Nächstes?" nimm den ersten nicht erledigten Punkt von heute (nach Uhrzeit) im aktiven Plan, nenne Ort, Uhrzeit und die genaue Anreise ab Standort (Verkehrsmittel, Linie, Haltestelle, Minuten) und rufe zusätzlich show_map mit dem Ziel auf. Nutze search_web für aktuelle Zeiten, Preise und Anbieter. Du darfst die Planung und das Aussehen ändern (add_item, update_item, delete_item, replace_day, add_plan, rename_plan, delete_plan, set_day_title, set_theme; Aktivitäten dürfen ein passendes Emoji als icon bekommen), wenn der Nutzer es wünscht oder klar meint, und beschreibst danach kurz, was du geändert hast. Bei Buchbarem (Touren, Tickets, Restaurants) suchst du per search_web die offizielle Buchungsseite und gibst sie als Markdown-Link [Beschriftung](URL) aus; trage den Link zusätzlich per update_item im Feld link ein. Nutze nur echte URLs aus den Suchergebnissen und erfinde keine Links. Wenn die URL Parameter für Datum, Uhrzeit und Personenzahl unterstützt (4 Personen, Datum und Uhrzeit aus der Planung), trage sie schon ein; sonst nenne unter dem Link die Werte zum Eintragen (Datum, Uhrzeit, 4 Personen). Datumsformat YYYY-MM-DD, nur 2026-10-19 bis 2026-10-25. Erfinde keine Zeiten oder Preise.`}
 
 async function chatSend(text){if(!cfg.gem)return toast('Bitte zuerst den Gemini-Key unter „Mehr“ eintragen');
  ui.msgs.push({r:'u',t:text});ui.cb=true;render();
- const loc=await getLoc(),ctx={cards:[],log:[],loc},contents=[...ui.hist,{role:'user',parts:[{text}]}];let out='';
+ const loc=await getLoc(),ctx={cards:[],log:[],loc},contents=histOf();let out='';
  try{for(let n=0;n<6;n++){
   const j=await gemF({systemInstruction:{parts:[{text:sysPrompt(loc)}]},contents,tools:[{functionDeclarations:FD}]}),c=j.candidates?.[0]?.content;
   if(!c)throw new Error('Keine Antwort erhalten');contents.push(c);
@@ -252,15 +266,15 @@ async function chatSend(text){if(!cfg.gem)return toast('Bitte zuerst den Gemini-
   const resp=[];for(const x of fc){const nm=x.functionCall.name;let r;try{r=await RUN[nm](x.functionCall.args||{},ctx)}catch(e){r={error:e.message}}resp.push({functionResponse:{name:nm,response:r}})}
   contents.push({role:'user',parts:resp})}}
  catch(e){out='Fehler: '+e.message}
- out=out||'Erledigt.';ui.hist.push({role:'user',parts:[{text}]},{role:'model',parts:[{text:out}]});ui.hist=ui.hist.slice(-20);
- ui.msgs.push({r:'a',t:out,cards:ctx.cards,log:ctx.log});ui.cb=false;if(ctx.log.length)save('plans');else render()}
+ out=out||'Erledigt.';
+ ui.msgs.push({r:'a',t:out,cards:ctx.cards,log:ctx.log});ui.cb=false;saveChat();if(ctx.log.length)save('plans');else render()}
 
 const vCard=c=>`<div class="mt-2 overflow-hidden rounded-xl border border-sea/10 bg-white"><iframe loading="lazy" class="h-44 w-full" src="https://maps.google.com/maps?${c.from?`saddr=${encodeURIComponent(c.from)}&amp;daddr=${encodeURIComponent(c.to)}`:`q=${encodeURIComponent(c.to)}`}&amp;output=embed"></iframe><a target="_blank" rel="noopener" class="flex items-center gap-2 p-2 text-sm font-semibold text-az" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.to)}${c.from?'&origin='+encodeURIComponent(c.from):''}&travelmode=transit"><i data-lucide="navigation" class="h-4 w-4"></i>Route in Google Maps: ${h(c.to)}</a></div>`;
 const vFab=()=>ui.chat?'':`<button data-a="chat" class="fixed right-4 z-30 flex items-center gap-2 rounded-full bg-sun px-4 py-3 font-semibold text-sea shadow-lg" style="bottom:calc(4.75rem + env(safe-area-inset-bottom,0px))"><i data-lucide="message-circle"></i>Assistent</button>`;
 const vChat=()=>`<div class="fixed inset-0 z-40 flex flex-col bg-salt" style="padding-top:env(safe-area-inset-top,0px)">
 <div class="flex items-center gap-2 bg-sea px-4 py-3 text-white"><i data-lucide="sparkles"></i><b class="font-display flex-1 text-lg">Barcelona-Assistent</b>
 <button data-a="loc" class="chip !border-white/30 !bg-white/15 !py-1 text-xs !text-white">${ui.noLoc?'Standort aus':'Standort an'}</button><button data-a="chatClear" class="btn-ic !text-white" aria-label="Neu starten"><i data-lucide="rotate-ccw"></i></button><button data-a="chat" class="btn-ic !text-white" aria-label="Schließen"><i data-lucide="x"></i></button></div>
-<div id="c-list" class="flex-1 space-y-3 overflow-y-auto px-4 py-4">${ui.msgs.length?'':`<p class="text-sea/70">Frag mich alles zu Barcelona und eurer Planung. Ich kenne alle Pläne, die Uhrzeit und (wenn erlaubt) deinen Standort und kann die Planung auch umbauen.</p><div class="flex flex-wrap gap-2">${QUICK.map(q=>`<button data-a="quick" data-q="${h(q)}" class="chip !whitespace-normal text-left">${h(q)}</button>`).join('')}</div>`}${ui.msgs.map(m=>m.r==='u'?`<div class="ml-10 rounded-2xl rounded-br-sm bg-sea p-3 text-white">${h(m.t)}</div>`:`<div class="mr-6 rounded-2xl rounded-bl-sm bg-white p-3 text-sm leading-relaxed">${fmt(m.t)}${(m.log||[]).map(l=>`<div class="mt-2 rounded-lg bg-sun/30 px-2 py-1 text-xs font-semibold">✓ ${h(l)}</div>`).join('')}${(m.cards||[]).map(vCard).join('')}</div>`).join('')}${ui.cb?'<div class="mr-6 rounded-2xl bg-white p-3 text-sm text-sea/60">Denke nach …</div>':''}</div>
+<div id="c-list" class="flex-1 space-y-3 overflow-y-auto px-4 py-4">${ui.msgs.length?'':`<p class="text-sea/70">Frag mich alles zu Barcelona und eurer Planung. Ich kenne alle Pläne, die Uhrzeit und (wenn erlaubt) deinen Standort und kann die Planung auch umbauen.</p><div class="flex flex-wrap gap-2">${QUICK.map(q=>`<button data-a="quick" data-q="${h(q)}" class="chip !whitespace-normal text-left">${h(q)}</button>`).join('')}</div>`}${ui.msgs.map((m,k)=>m.r==='u'?`<div class="ml-10 rounded-2xl rounded-br-sm bg-sea p-3 text-white"><button data-a="delMsg" data-i="${k}" class="btn-ic float-right !p-1 !text-white/70" aria-label="Löschen"><i data-lucide="trash-2"></i></button>${h(m.t)}</div>`:`<div class="mr-6 rounded-2xl rounded-bl-sm bg-white p-3 text-sm leading-relaxed"><button data-a="delMsg" data-i="${k}" class="btn-ic float-right !p-1 opacity-60" aria-label="Löschen"><i data-lucide="trash-2"></i></button>${fmt(m.t)}${(m.log||[]).map(l=>`<div class="mt-2 rounded-lg bg-sun/30 px-2 py-1 text-xs font-semibold">✓ ${h(l)}</div>`).join('')}${(m.cards||[]).map(vCard).join('')}</div>`).join('')}${ui.cb?'<div class="mr-6 rounded-2xl bg-white p-3 text-sm text-sea/60">Denke nach …</div>':''}</div>
 <div class="flex gap-2 border-t border-sea/10 bg-white p-3" style="padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))"><input id="c-in" class="inp" placeholder="Frage stellen …" autocomplete="off"><button data-a="send" class="btn" aria-label="Senden" ${ui.cb?'disabled':''}><i data-lucide="send"></i></button></div></div>`;
 /* ---------- Aktionen ---------- */
 const A={
@@ -280,7 +294,7 @@ const A={
  toggle:d=>{const i=(plan().days[ui.day]||[]).find(x=>x.id===d.id);if(i){i.done=!i.done;save('plans')}},
  delItem:d=>{const p=plan();p.days[ui.day]=(p.days[ui.day]||[]).filter(x=>x.id!==d.id);save('plans')},
  item:d=>{ui.modal={t:'item',id:d.id||null};render()},
- saveItem(){const p=plan(),l=p.days[ui.day]=p.days[ui.day]||[],v={time:$('#m-time').value,title:$('#m-title').value.trim(),place:$('#m-place').value.trim(),note:$('#m-note').value.trim()};
+ saveItem(){const p=plan(),l=p.days[ui.day]=p.days[ui.day]||[],v={time:$('#m-time').value,title:$('#m-title').value.trim(),place:$('#m-place').value.trim(),note:$('#m-note').value.trim(),link:(l=>/^https?:\/\//.test(l)?l:'')($('#m-link').value.trim())};
   if(!v.title)return toast('Bitte einen Titel eingeben');const e=ui.modal.id;let nid=null;if(e)Object.assign(l.find(i=>i.id===e),v);else{nid=uid();l.push({id:nid,done:false,...v})}ui.modal=null;save('plans');if(nid&&cfg.gem)getInfo(ui.plan,ui.day,nid,'',false)},
  ai(){ui.modal={t:'ai'};render()},runAI,close(){ui.modal=null;render()},
  info:d=>{ui.modal={t:'info',id:d.id};render()},
@@ -290,14 +304,16 @@ const A={
   for(const m of [cfg.model]){try{const j=await gem({contents:[{role:'user',parts:[{text:'Wie wird das Wetter heute in Barcelona? Ein Satz.'}]}],tools:[{google_search:{}}]},m);
    res.push(`${m}: ${j.candidates?.[0]?.groundingMetadata?.groundingChunks?.length?'Live-Suche funktioniert':'Antwort ohne Quellen'}`)}catch(e){res.push(`${m}: ${String(e.message).slice(0,120)}`)}}
   ui.testRes=res.join('\n');render()},
- chat(){ui.chat=!ui.chat;render()},loc(){ui.noLoc=!ui.noLoc;render()},chatClear(){ui.msgs=[];ui.hist=[];render()},
+ chat(){ui.chat=!ui.chat;render()},loc(){ui.noLoc=!ui.noLoc;render()},chatClear(){if(confirm('Ganzen Chatverlauf löschen?')){ui.msgs=[];saveChat();render()}},
+ delMsg(d){if(ui.cb)return;const i=+d.i,m=ui.msgs[i];if(!m)return;ui.msgs.splice(m.r==='u'?i:Math.max(0,i-1),2);saveChat();render()},
+ delInfo:d=>{const it=findIt(ui.plan,ui.day,d.id)[1];if(it&&confirm('KI-Recherche zu diesem Punkt löschen?')){delete it.info;delete it.qa;save('plans')}},
+ delQa:d=>{const it=findIt(ui.plan,ui.day,d.id)[1];if(it?.qa){it.qa.splice(+d.i,1);save('plans')}},
  quick:d=>chatSend(d.q),send(){const t=($('#c-in')?.value||'').trim();if(t&&!ui.cb)chatSend(t)},
  trin:(d,el)=>{ui.tr[d.k]=Math.max(1,+el.value||1);render()},
  addPack(){const t=$('#p-t').value.trim();if(t){S.packing.push({id:uid(),t,d:false});save('packing')}},
  togPack:d=>{const x=S.packing.find(i=>i.id===d.id);x.d=!x.d;save('packing')},
  delPack:d=>{S.packing=S.packing.filter(i=>i.id!==d.id);save('packing')},
- async saveCfg(){const v={gem:$('#s-gem').value.trim(),model:$('#s-model').value.trim()};applyCfg(v);
-  if(sb){const r=await sb.from('trip_state').upsert({key:'config',value:v});if(r.error)return toast('Speichern fehlgeschlagen: '+r.error.message)}toast('Gespeichert, gilt für alle');render()},
+ async saveCfg(){cfg.gem=$('#s-gem').value.trim()||DEF.gem;cfg.model=$('#s-model').value.trim()||DEF.model;try{await saveCfgShared()}catch(e){return toast('Speichern fehlgeschlagen: '+e.message)}toast('Gespeichert, gilt für alle');render()},
  async savePin(){const p=$('#s-pin').value;if(p.length<4)return toast('Mindestens 4 Zeichen');const hs=await sha(p);
   if(sb){const r=await sb.from('trip_state').upsert({key:'pin',value:hs});if(r.error)return toast(r.error.message)}else localStorage.bcn_pin=hs;toast('PIN geändert');$('#s-pin').value=''},
  copySql(){navigator.clipboard.writeText(SQL).then(()=>toast('SQL kopiert'))},
