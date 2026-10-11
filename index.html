@@ -50,7 +50,7 @@ alter publication supabase_realtime add table trip_state;`;
 
 const DEF={url:'https://tkvbbibxvrucaphmgraf.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrdmJiaWJ4dnJ1Y2FwaG1ncmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NjEzNDYsImV4cCI6MjEwNzIzNzM0Nn0.okQ_CvS2V-_KnbSwO_TSjEXteN1vZIhMNVshBm9FVtI',gem:'AQ.Ab8RN6I1ZCf03Ijb_qhazBxlAdgGGSabV1S6CHLIYR2_o3Aktg',model:'gemini-3.1-flash-lite'};
 let cfg={...DEF}, sb=null, S={},
-ui={tab:'plan',plan:null,day:DAYS[0],modal:null,sync:'local',err:'',busy:false,pend:false,tr:{p:4,days:6,r:4,hd:5}};
+ui={auto:new Set(),msgs:[],hist:[],chat:false,cb:false,noLoc:false,tab:'plan',plan:null,day:DAYS[0],modal:null,sync:'local',err:'',busy:false,pend:false,tr:{p:4,days:6,r:4,hd:5}};
 
 const seed=()=>({
  plans:[{id:uid(),name:'Hauptplan der Gruppe',days:{
@@ -108,7 +108,7 @@ return `<div class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2">${S.plans.map(x=
 ${its.length?`<p class="mt-2 text-sm text-sea/70">${dn} von ${its.length} erledigt</p>`:''}
 <ul class="mt-1">${its.map(i=>`<li class="flex items-start gap-3 border-b border-sea/10 py-3 ${i.done?'opacity-50':''}"><input type="checkbox" data-a="toggle" data-id="${i.id}" ${i.done?'checked':''} class="mt-1 h-5 w-5 shrink-0 accent-[#1B8A9A]" aria-label="Erledigt">
 <div class="font-display w-12 shrink-0 text-sea">${h(i.time||'–')}</div><div class="min-w-0 flex-1"><div class="font-semibold ${i.done?'line-through':''}">${h(i.title)}</div>${i.note?`<div class="text-sm text-sea/70">${h(i.note)}</div>`:''}
-<a href="${maps(i.place||i.title+' Barcelona')}" target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-az"><i data-lucide="map-pin" class="h-4 w-4"></i>In Google Maps öffnen</a><button data-a="info" data-id="${i.id}" class="ml-4 mt-1 inline-flex items-center gap-1 text-sm font-semibold text-sea"><i data-lucide="sparkles" class="h-4 w-4"></i>${i.info?'Infos ansehen':'KI-Infos'}</button></div>
+<a href="${maps(i.place||i.title+' Barcelona')}" target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-az"><i data-lucide="map-pin" class="h-4 w-4"></i>In Google Maps öffnen</a><button data-a="info" data-id="${i.id}" class="ml-4 mt-1 inline-flex items-center gap-1 text-sm font-semibold text-sea"><i data-lucide="sparkles" class="h-4 w-4"></i>${ui.auto.has(i.id)?'KI recherchiert …':i.info?'Infos ansehen':'KI-Infos'}</button></div>
 <button data-a="item" data-id="${i.id}" class="btn-ic" aria-label="Bearbeiten"><i data-lucide="pencil"></i></button><button data-a="delItem" data-id="${i.id}" class="btn-ic" aria-label="Löschen"><i data-lucide="trash-2"></i></button></li>`).join('')||'<p class="py-6 text-sea/60">Für diesen Tag ist noch nichts geplant. Füge etwas hinzu oder lass den KI-Assistenten planen.</p>'}</ul>
 <button data-a="item" class="btn mt-4 w-full"><i data-lucide="plus"></i>Aktivität hinzufügen</button>`}
 
@@ -159,8 +159,8 @@ function vModal(){const m=ui.modal;if(!m)return '';let b='';
  return `<div class="fixed inset-0 z-40 flex items-end bg-black/40 sm:items-center"><div class="mx-auto max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-salt p-5 sm:rounded-3xl" style="padding-bottom:calc(1.25rem + env(safe-area-inset-bottom,0px))"><button data-a="close" class="btn-ic float-right" aria-label="Schließen"><i data-lucide="x"></i></button>${b}</div></div>`}
 
 function render(){const r=$('#app');
- r.innerHTML=sessionStorage.bcn_in?vHead()+`<main class="mx-auto max-w-xl px-4 pb-28 pt-4">${{plan:vPlan,tr:vTr,pack:vPack,set:vSet}[ui.tab]()}</main>`+vNav()+vModal():vLogin();
- lucide.createIcons();ui.pend=false}
+ r.innerHTML=sessionStorage.bcn_in?vHead()+`<main class="mx-auto max-w-xl px-4 pb-28 pt-4">${{plan:vPlan,tr:vTr,pack:vPack,set:vSet}[ui.tab]()}</main>`+vNav()+vFab()+vModal()+(ui.chat?vChat():''):vLogin();
+ lucide.createIcons();ui.pend=false;const cl=$('#c-list');if(cl)cl.scrollTop=cl.scrollHeight}
 
 /* ---------- KI ---------- */
 async function runAI(){if(!cfg.gem)return toast('Bitte zuerst den Gemini-Key unter „Mehr“ eintragen');
@@ -180,23 +180,88 @@ Aufgabe: Erstelle tagesgenaue Routen, geografisch sinnvoll gruppiert, mit kurzen
  ui.busy=false;save('plans')}
 
 const fmt=t=>h(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').split('\n').map(l=>/^\s*[-*] /.test(l)?`<div class="mt-1 flex gap-2"><span>•</span><span>${l.replace(/^\s*[-*] /,'')}</span></div>`:l.trim()?`<p class="mt-2">${l}</p>`:'').join('');
-function vInfo(id){const it=(plan().days[ui.day]||[]).find(x=>x.id===id)||{},f=it.info;
- return `<h3 class="font-display text-xl">${h(it.title)}</h3><p class="text-sm text-sea/70">KI-Infos mit aktueller Websuche</p>
-<label class="lbl" for="i-q">Eigene Frage oder Wunsch (optional)</label><input id="i-q" class="inp" value="${h(it.q||'')}" placeholder="z. B. Abfahrtszeiten ab Plaça de Catalunya">
-<button data-a="runInfo" data-id="${h(id)}" class="btn mt-3 w-full" ${ui.busy?'disabled':''}><i data-lucide="sparkles"></i>${ui.busy?'Recherchiere …':f?'Neu recherchieren':'Infos und Empfehlungen holen'}</button>
-${f?`<div class="mt-4 rounded-2xl bg-white p-4 text-sm leading-relaxed">${fmt(f.text)}</div>${f.src?.length?`<p class="mt-3 text-sm font-semibold">Quellen</p>${f.src.map(s=>`<a href="${h(s.u)}" target="_blank" rel="noopener" class="mt-1 block truncate text-sm text-az">${h(s.t||s.u)}</a>`).join('')}`:''}<p class="mt-3 text-xs text-sea/60">KI-Angaben können veraltet oder falsch sein. Zeiten und Preise bitte beim Anbieter prüfen.</p>`:''}`}
-async function runInfo(id){if(!cfg.gem)return toast('Bitte zuerst den Gemini-Key unter „Mehr“ eintragen');
- const it=(plan().days[ui.day]||[]).find(x=>x.id===id);if(!it)return;it.q=($('#i-q')?.value||'').trim();ui.busy=true;render();
- const prompt=`Du bist Reiseberater für Barcelona (Familie mit 4 Personen, Unterkunft: ${HOTEL.addr}, Reisezeit 19. bis 25.10.2026). Recherchiere aktuell im Web zu diesem Programmpunkt: "${it.title}"${it.place?` (Ort bzw. Einstiegspunkt: ${it.place})`:''}${it.time?`, geplante Uhrzeit ${it.time}`:''} am ${dl(ui.day)}. Notiz: ${it.note||'keine'}.${it.q?` Besonderer Wunsch: ${it.q}`:''}
+const FALL='gemini-2.5-flash',
+CTX=`Familie mit 4 Personen, Unterkunft ${HOTEL.addr}, Reisezeit 19. bis 25.10.2026`,
+findIt=(pid,day,id)=>{const p=S.plans.find(x=>x.id===pid);return[p,(p?.days[day]||[]).find(x=>x.id===id)]},
+infoPrompt=(it,day)=>`Du bist Reiseberater für Barcelona (${CTX}). Recherchiere aktuell im Web zu diesem Programmpunkt: "${it.title}"${it.place?` (Ort bzw. Einstiegspunkt: ${it.place})`:''}${it.time?`, geplante Uhrzeit ${it.time}`:''} am ${dl(day)}. Notiz: ${it.note||'keine'}.${it.q?` Besonderer Wunsch: ${it.q}`:''}
 Antworte auf Deutsch, kompakt und ohne Einleitung: **Empfehlung** (bester Anbieter bzw. beste Option mit kurzer Begründung, bei mehreren Anbietern ein kurzer Vergleich), **Preise** für 4 Personen, **Zeiten** (Abfahrts- bzw. Öffnungszeiten genau für den Einstiegspunkt bzw. Ort im Oktober), **Anfahrt** vom Hotel, **Tipps** (Vorab-Buchung, beste Uhrzeit, Wartezeit). Wenn du etwas nicht sicher findest, schreibe das ausdrücklich und nenne die offizielle Webseite. Nutze **Fettdruck** für Überschriften und Listen mit "- ".`;
- try{const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model||'gemini-2.5-flash'}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.gem},
-  body:JSON.stringify({contents:[{parts:[{text:prompt}]}],tools:[{google_search:{}}]})});
-  const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
-  const c=j.candidates?.[0],text=(c?.content?.parts||[]).map(x=>x.text||'').join('').trim();if(!text)throw new Error('Keine Antwort erhalten');
-  const seen=new Set(),src=(c.groundingMetadata?.groundingChunks||[]).map(g=>g.web).filter(w=>w&&w.uri&&!seen.has(w.uri)&&seen.add(w.uri)).slice(0,6).map(w=>({t:w.title||'',u:w.uri}));
-  it.info={text,src,ts:Date.now()}}catch(e){toast('KI-Fehler: '+e.message)}
- ui.busy=false;save('plans')}
 
+async function gem(body,model){const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model||cfg.model}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.gem},body:JSON.stringify(body)});
+ const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);return j}
+const gemF=async b=>{try{return await gem(b)}catch(e){if(cfg.model===FALL)throw e;return await gem(b,FALL)}};
+async function ask(prompt){const body={contents:[{role:'user',parts:[{text:prompt}]}]},
+ parse=j=>{const c=j.candidates?.[0],text=(c?.content?.parts||[]).map(x=>x.text||'').join('').trim();if(!text)throw new Error('Keine Antwort erhalten');
+  const seen=new Set(),src=(c.groundingMetadata?.groundingChunks||[]).map(g=>g.web).filter(w=>w&&w.uri&&!seen.has(w.uri)&&seen.add(w.uri)).slice(0,6).map(w=>({t:w.title||'',u:w.uri}));return{text,src}},
+ tries=[[cfg.model,1],[FALL,1],[cfg.model,0],[FALL,0]].filter((t,i,a)=>a.findIndex(u=>u[0]===t[0]&&u[1]===t[1])===i);let last;
+ for(const [m,w] of tries){try{return{...parse(await gem(w?{...body,tools:[{google_search:{}}]}:body,m)),web:!!w}}catch(e){last=e}}throw last}
+
+function vInfo(id){const it=findIt(ui.plan,ui.day,id)[1]||{},f=it.info,busy=ui.auto.has(id),q=encodeURIComponent(it.place||it.title+' Barcelona');
+ return `<h3 class="font-display text-xl">${h(it.title)}</h3>
+<iframe loading="lazy" class="mt-3 h-40 w-full rounded-xl border border-sea/10" src="https://maps.google.com/maps?q=${q}&amp;output=embed"></iframe>
+<label class="lbl" for="i-q">${f?'Weitere Frage zu diesem Punkt':'Eigener Wunsch (optional)'}</label><input id="i-q" class="inp" value="${f?'':h(it.q||'')}" placeholder="${f?'z. B. Welche Haltestelle ist am nächsten?':'z. B. Abfahrtszeiten ab Plaça de Catalunya'}">
+<div class="mt-3 flex gap-2">${f?`<button data-a="askInfo" data-id="${h(id)}" class="btn flex-1" ${busy?'disabled':''}><i data-lucide="message-circle"></i>Fragen</button><button data-a="runInfo" data-id="${h(id)}" class="btn flex-1 !bg-white !text-sea border border-sea/20" ${busy?'disabled':''}>Neu recherchieren</button>`:`<button data-a="runInfo" data-id="${h(id)}" class="btn w-full" ${busy?'disabled':''}><i data-lucide="sparkles"></i>Infos und Empfehlungen holen</button>`}</div>
+${busy?'<p class="mt-3 text-sm text-sea/70">KI recherchiert …</p>':''}
+${f?`<div class="mt-4 rounded-2xl bg-white p-4 text-sm leading-relaxed">${fmt(f.text)}</div>${(it.qa||[]).map(x=>`<div class="mt-3 rounded-2xl bg-sea/5 p-3 text-sm"><b>${h(x.q)}</b>${fmt(x.a)}</div>`).join('')}${f.src?.length?`<p class="mt-3 text-sm font-semibold">Quellen</p>${f.src.map(s=>`<a href="${h(s.u)}" target="_blank" rel="noopener" class="mt-1 block truncate text-sm text-az">${h(s.t||s.u)}</a>`).join('')}`:''}<p class="mt-3 text-xs text-sea/60">${f.web===false?'Ohne Live-Websuche erstellt (Kontingent). ':''}KI-Angaben können veraltet sein. Zeiten und Preise bitte beim Anbieter prüfen.</p>`:''}`}
+
+async function getInfo(pid,day,id,q,follow){const it=findIt(pid,day,id)[1];if(!it||!cfg.gem)return;ui.auto.add(id);render();
+ try{if(follow&&it.info){const r=await ask(`Du bist Reiseberater für Barcelona (${CTX}). Programmpunkt: "${it.title}" (${it.place||'kein Ort'}). Bisherige Recherche:\n${it.info.text}\nWeitere Frage: ${q}\nAntworte kurz und konkret auf Deutsch und recherchiere bei Bedarf aktuell im Web.`);(it.qa=it.qa||[]).push({q,a:r.text})}
+ else{const r=await ask(infoPrompt(it,day));it.info={text:r.text,src:r.src,web:r.web,ts:Date.now()}}}
+ catch(e){toast('KI-Fehler: '+e.message)}
+ ui.auto.delete(id);save('plans')}
+
+/* ---------- Live-Assistent ---------- */
+const S_=d=>({type:'string',description:d}),
+ITEM={type:'object',properties:{time:S_('Uhrzeit HH:MM'),title:S_('Titel'),place:S_('Ort bzw. Adresse für Google Maps'),note:S_('Notiz mit Anreise')},required:['title']},
+OBJ=(properties,required)=>({type:'object',properties,required}),
+FD=[
+ {name:'add_item',description:'Aktivität zu einem Tag hinzufügen',parameters:OBJ({plan_id:S_('Plan-ID, leer = aktiver Plan'),date:S_('Datum YYYY-MM-DD'),time:S_('Uhrzeit HH:MM'),title:S_('Titel'),place:S_('Ort bzw. Adresse für Google Maps'),note:S_('Notiz')},['date','title'])},
+ {name:'update_item',description:'Aktivität ändern oder auf einen anderen Tag verschieben',parameters:OBJ({id:S_('ID der Aktivität'),date:S_('neues Datum, optional'),time:S_('Uhrzeit'),title:S_('Titel'),place:S_('Ort'),note:S_('Notiz'),done:{type:'boolean',description:'erledigt'}},['id'])},
+ {name:'delete_item',description:'Aktivität löschen',parameters:OBJ({id:S_('ID der Aktivität')},['id'])},
+ {name:'replace_day',description:'Einen ganzen Tag neu planen (ersetzt alle Einträge des Tages)',parameters:OBJ({plan_id:S_('Plan-ID, leer = aktiver Plan'),date:S_('Datum YYYY-MM-DD'),items:{type:'array',items:ITEM}},['date','items'])},
+ {name:'add_plan',description:'Neuen Plan-Tab anlegen',parameters:OBJ({name:S_('Name des Plans')},['name'])},
+ {name:'show_map',description:'Zeigt dem Nutzer eine Karte bzw. Route im Chat',parameters:OBJ({place:S_('Ziel'),from_place:S_('Start, leer = aktueller Standort')},['place'])},
+ {name:'search_web',description:'Aktuelle Infos per Websuche (Zeiten, Preise, Anbieter)',parameters:OBJ({query:S_('Suchfrage')},['query'])}],
+QUICK=['Wohin muss ich als Nächstes und wie komme ich hin?','Wie komme ich zum Hotel zurück?','Was können wir heute noch machen?','Plane Tag 3 neu mit mehr Pausen'],
+pl=a=>S.plans.find(x=>x.id===a.plan_id)||plan(),
+newIt=i=>({id:uid(),done:false,time:i.time||'',title:i.title||'',place:i.place||'',note:i.note||''}),
+RUN={
+ add_item:(a,c)=>{if(!DAYS.includes(a.date))return{error:'Datum nur 2026-10-19 bis 2026-10-25'};const p=pl(a),i=newIt(a);(p.days[a.date]=p.days[a.date]||[]).push(i);c.log.push(`Hinzugefügt: ${a.title} (${dl(a.date)})`);return{ok:true,id:i.id}},
+ update_item:(a,c)=>{for(const p of S.plans)for(const d in p.days){const l=p.days[d],i=l.find(x=>x.id===a.id);if(i){['time','title','place','note'].forEach(k=>{if(a[k]!=null)i[k]=a[k]});if(a.done!=null)i.done=a.done;
+  if(a.date&&a.date!==d&&DAYS.includes(a.date)){l.splice(l.indexOf(i),1);(p.days[a.date]=p.days[a.date]||[]).push(i)}c.log.push(`Geändert: ${i.title}`);return{ok:true}}}return{error:'ID nicht gefunden'}},
+ delete_item:(a,c)=>{for(const p of S.plans)for(const d in p.days){const i=p.days[d].find(x=>x.id===a.id);if(i){p.days[d]=p.days[d].filter(x=>x!==i);c.log.push(`Gelöscht: ${i.title}`);return{ok:true}}}return{error:'ID nicht gefunden'}},
+ replace_day:(a,c)=>{if(!DAYS.includes(a.date))return{error:'Datum nur 2026-10-19 bis 2026-10-25'};pl(a).days[a.date]=(a.items||[]).map(newIt);c.log.push(`Tag neu geplant: ${dl(a.date)}`);return{ok:true}},
+ add_plan:(a,c)=>{const p={id:uid(),name:a.name,days:{}};S.plans.push(p);c.log.push(`Neuer Plan: ${a.name}`);return{ok:true,plan_id:p.id}},
+ show_map:(a,c)=>{c.cards.push({to:a.place,from:a.from_place||(c.loc?`${c.loc.lat},${c.loc.lng}`:'')});return{ok:true}},
+ search_web:async a=>{try{return{text:(await ask(a.query+' (Barcelona, Oktober 2026; knapp und mit Fakten antworten)')).text}}catch(e){return{error:e.message}}}};
+
+const getLoc=()=>new Promise(r=>{if(!navigator.geolocation||ui.noLoc)return r(null);navigator.geolocation.getCurrentPosition(p=>r({lat:+p.coords.latitude.toFixed(5),lng:+p.coords.longitude.toFixed(5)}),()=>r(null),{timeout:6000,maximumAge:60000})});
+function sysPrompt(loc){const n=new Date(),today=n.toLocaleDateString('sv-SE',{timeZone:'Europe/Madrid'}),tm=n.toLocaleString('de-DE',{timeZone:'Europe/Madrid',weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}),
+ plans=S.plans.map(p=>({plan_id:p.id,name:p.name,tage:Object.fromEntries(Object.entries(p.days).map(([d,l])=>[d,sorted(l).map(i=>({id:i.id,zeit:i.time,titel:i.title,ort:i.place,notiz:i.note,erledigt:i.done,infos:i.info?.text?.slice(0,400)}))]))}));
+ return `Du bist der Live-Reiseassistent einer Familie (4 Personen) in Barcelona (Reise 19.–25.10.2026, Flug ab Prag). Unterkunft: ${HOTEL.addr}. Aktuell: ${tm} (Ortszeit Barcelona, heutiges Datum ${today}). Standort: ${loc?`${loc.lat}, ${loc.lng} (GPS des Handys)`:'unbekannt (frage bei Bedarf nach dem Startpunkt)'}. Aktiver Plan: ${plan().name} (${plan().id}).
+PLANUNG (JSON): ${JSON.stringify(plans)}
+Regeln: Antworte auf Deutsch, kurz und konkret. Bei Fragen wie "Wohin als Nächstes?" nimm den ersten nicht erledigten Punkt von heute (nach Uhrzeit) im aktiven Plan, nenne Ort, Uhrzeit und die genaue Anreise ab Standort (Verkehrsmittel, Linie, Haltestelle, Minuten) und rufe zusätzlich show_map mit dem Ziel auf. Nutze search_web für aktuelle Zeiten, Preise und Anbieter. Du darfst die Planung ändern (add_item, update_item, delete_item, replace_day, add_plan), wenn der Nutzer es wünscht oder klar meint, und beschreibst danach kurz, was du geändert hast. Datumsformat YYYY-MM-DD, nur 2026-10-19 bis 2026-10-25. Erfinde keine Zeiten oder Preise.`}
+
+async function chatSend(text){if(!cfg.gem)return toast('Bitte zuerst den Gemini-Key unter „Mehr“ eintragen');
+ ui.msgs.push({r:'u',t:text});ui.cb=true;render();
+ const loc=await getLoc(),ctx={cards:[],log:[],loc},contents=[...ui.hist,{role:'user',parts:[{text}]}];let out='';
+ try{for(let n=0;n<6;n++){
+  const j=await gemF({systemInstruction:{parts:[{text:sysPrompt(loc)}]},contents,tools:[{functionDeclarations:FD}]}),c=j.candidates?.[0]?.content;
+  if(!c)throw new Error('Keine Antwort erhalten');contents.push(c);
+  const fc=(c.parts||[]).filter(x=>x.functionCall);
+  if(!fc.length){out=(c.parts||[]).map(x=>x.text||'').join('').trim();break}
+  const resp=[];for(const x of fc){const nm=x.functionCall.name;let r;try{r=await RUN[nm](x.functionCall.args||{},ctx)}catch(e){r={error:e.message}}resp.push({functionResponse:{name:nm,response:r}})}
+  contents.push({role:'user',parts:resp})}}
+ catch(e){out='Fehler: '+e.message}
+ out=out||'Erledigt.';ui.hist.push({role:'user',parts:[{text}]},{role:'model',parts:[{text:out}]});ui.hist=ui.hist.slice(-20);
+ ui.msgs.push({r:'a',t:out,cards:ctx.cards,log:ctx.log});ui.cb=false;if(ctx.log.length)save('plans');else render()}
+
+const vCard=c=>`<div class="mt-2 overflow-hidden rounded-xl border border-sea/10 bg-white"><iframe loading="lazy" class="h-44 w-full" src="https://maps.google.com/maps?${c.from?`saddr=${encodeURIComponent(c.from)}&amp;daddr=${encodeURIComponent(c.to)}`:`q=${encodeURIComponent(c.to)}`}&amp;output=embed"></iframe><a target="_blank" rel="noopener" class="flex items-center gap-2 p-2 text-sm font-semibold text-az" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.to)}${c.from?'&origin='+encodeURIComponent(c.from):''}&travelmode=transit"><i data-lucide="navigation" class="h-4 w-4"></i>Route in Google Maps: ${h(c.to)}</a></div>`;
+const vFab=()=>ui.chat?'':`<button data-a="chat" class="fixed right-4 z-30 flex items-center gap-2 rounded-full bg-sun px-4 py-3 font-semibold text-sea shadow-lg" style="bottom:calc(4.75rem + env(safe-area-inset-bottom,0px))"><i data-lucide="message-circle"></i>Assistent</button>`;
+const vChat=()=>`<div class="fixed inset-0 z-40 flex flex-col bg-salt" style="padding-top:env(safe-area-inset-top,0px)">
+<div class="flex items-center gap-2 bg-sea px-4 py-3 text-white"><i data-lucide="sparkles"></i><b class="font-display flex-1 text-lg">Barcelona-Assistent</b>
+<button data-a="loc" class="chip !border-white/30 !bg-white/15 !py-1 text-xs !text-white">${ui.noLoc?'Standort aus':'Standort an'}</button><button data-a="chatClear" class="btn-ic !text-white" aria-label="Neu starten"><i data-lucide="rotate-ccw"></i></button><button data-a="chat" class="btn-ic !text-white" aria-label="Schließen"><i data-lucide="x"></i></button></div>
+<div id="c-list" class="flex-1 space-y-3 overflow-y-auto px-4 py-4">${ui.msgs.length?'':`<p class="text-sea/70">Frag mich alles zu Barcelona und eurer Planung. Ich kenne alle Pläne, die Uhrzeit und (wenn erlaubt) deinen Standort und kann die Planung auch umbauen.</p><div class="flex flex-wrap gap-2">${QUICK.map(q=>`<button data-a="quick" data-q="${h(q)}" class="chip !whitespace-normal text-left">${h(q)}</button>`).join('')}</div>`}${ui.msgs.map(m=>m.r==='u'?`<div class="ml-10 rounded-2xl rounded-br-sm bg-sea p-3 text-white">${h(m.t)}</div>`:`<div class="mr-6 rounded-2xl rounded-bl-sm bg-white p-3 text-sm leading-relaxed">${fmt(m.t)}${(m.log||[]).map(l=>`<div class="mt-2 rounded-lg bg-sun/30 px-2 py-1 text-xs font-semibold">✓ ${h(l)}</div>`).join('')}${(m.cards||[]).map(vCard).join('')}</div>`).join('')}${ui.cb?'<div class="mr-6 rounded-2xl bg-white p-3 text-sm text-sea/60">Denke nach …</div>':''}</div>
+<div class="flex gap-2 border-t border-sea/10 bg-white p-3" style="padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))"><input id="c-in" class="inp" placeholder="Frage stellen …" autocomplete="off"><button data-a="send" class="btn" aria-label="Senden" ${ui.cb?'disabled':''}><i data-lucide="send"></i></button></div></div>`;
 /* ---------- Aktionen ---------- */
 const A={
  async login(){
@@ -216,10 +281,13 @@ const A={
  delItem:d=>{const p=plan();p.days[ui.day]=(p.days[ui.day]||[]).filter(x=>x.id!==d.id);save('plans')},
  item:d=>{ui.modal={t:'item',id:d.id||null};render()},
  saveItem(){const p=plan(),l=p.days[ui.day]=p.days[ui.day]||[],v={time:$('#m-time').value,title:$('#m-title').value.trim(),place:$('#m-place').value.trim(),note:$('#m-note').value.trim()};
-  if(!v.title)return toast('Bitte einen Titel eingeben');const e=ui.modal.id;if(e)Object.assign(l.find(i=>i.id===e),v);else l.push({id:uid(),done:false,...v});ui.modal=null;save('plans')},
+  if(!v.title)return toast('Bitte einen Titel eingeben');const e=ui.modal.id;let nid=null;if(e)Object.assign(l.find(i=>i.id===e),v);else{nid=uid();l.push({id:nid,done:false,...v})}ui.modal=null;save('plans');if(nid&&cfg.gem)getInfo(ui.plan,ui.day,nid,'',false)},
  ai(){ui.modal={t:'ai'};render()},runAI,close(){ui.modal=null;render()},
  info:d=>{ui.modal={t:'info',id:d.id};render()},
- runInfo:d=>runInfo(d.id),
+ runInfo:d=>{const q=($('#i-q')?.value||'').trim(),it=findIt(ui.plan,ui.day,d.id)[1];if(it)it.q=q;getInfo(ui.plan,ui.day,d.id,q,false)},
+ askInfo:d=>{const q=($('#i-q')?.value||'').trim();if(!q)return toast('Bitte eine Frage eingeben');getInfo(ui.plan,ui.day,d.id,q,true)},
+ chat(){ui.chat=!ui.chat;render()},loc(){ui.noLoc=!ui.noLoc;render()},chatClear(){ui.msgs=[];ui.hist=[];render()},
+ quick:d=>chatSend(d.q),send(){const t=($('#c-in')?.value||'').trim();if(t&&!ui.cb)chatSend(t)},
  trin:(d,el)=>{ui.tr[d.k]=Math.max(1,+el.value||1);render()},
  addPack(){const t=$('#p-t').value.trim();if(t){S.packing.push({id:uid(),t,d:false});save('packing')}},
  togPack:d=>{const x=S.packing.find(i=>i.id===d.id);x.d=!x.d;save('packing')},
@@ -234,7 +302,7 @@ const A={
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||/INPUT|SELECT|TEXTAREA/.test(b.tagName))return;A[b.dataset.a]?.(b.dataset,b)});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.a&&/INPUT|SELECT|TEXTAREA/.test(t.tagName))A[t.dataset.a]?.(t.dataset,t)});
 document.addEventListener('focusout',()=>setTimeout(()=>{if(ui.pend&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){render();toast('Von Mitreisenden aktualisiert')}},150));
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='l-pin')A.login()});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='l-pin')A.login();if(e.key==='Enter'&&e.target.id==='c-in')A.send()});
 
 if(sessionStorage.bcn_in)start();else render();
 </script>
