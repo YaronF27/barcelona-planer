@@ -48,7 +48,7 @@ alter table trip_state enable row level security;
 create policy "gruppe" on trip_state for all using (true) with check (true);
 alter publication supabase_realtime add table trip_state;`;
 
-const DEF={url:'https://tkvbbibxvrucaphmgraf.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrdmJiaWJ4dnJ1Y2FwaG1ncmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NjEzNDYsImV4cCI6MjEwNzIzNzM0Nn0.okQ_CvS2V-_KnbSwO_TSjEXteN1vZIhMNVshBm9FVtI',gem:'AQ.Ab8RN6I1ZCf03Ijb_qhazBxlAdgGGSabV1S6CHLIYR2_o3Aktg',model:'gemini-3.1-flash-lite'};
+const DEF={url:'https://tkvbbibxvrucaphmgraf.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrdmJiaWJ4dnJ1Y2FwaG1ncmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NjEzNDYsImV4cCI6MjEwNzIzNzM0Nn0.okQ_CvS2V-_KnbSwO_TSjEXteN1vZIhMNVshBm9FVtI',gem:'AQ.Ab8RN6I1ZCf03Ijb_qhazBxlAdgGGSabV1S6CHLIYR2_o3Aktg',model:'gemini-3.8-flash'};
 let cfg={...DEF}, sb=null, S={},
 ui={auto:new Set(),msgs:[],hist:[],chat:false,cb:false,noLoc:false,tab:'plan',plan:null,day:DAYS[0],modal:null,sync:'local',err:'',busy:false,pend:false,tr:{p:4,days:6,r:4,hd:5}};
 
@@ -133,7 +133,7 @@ return `<h2 class="font-display text-2xl">Packliste</h2><p class="text-sm text-s
 const vSet=()=>`<h2 class="font-display text-2xl">Einstellungen</h2>
 <h3 class="mt-4 font-semibold">Gemini KI (gilt für alle)</h3>
 <label class="lbl" for="s-gem">API-Key (Google AI Studio)</label><input id="s-gem" type="password" class="inp" value="${h(cfg.gem||'')}">
-<label class="lbl" for="s-model">Modell</label><input id="s-model" class="inp" value="${h(cfg.model||'gemini-2.5-flash')}">
+<label class="lbl" for="s-model">Modell</label><input id="s-model" class="inp" value="${h(cfg.model||'gemini-3.8-flash')}">
 <p class="mt-2 text-xs text-sea/60">Änderungen werden in Supabase gespeichert und gelten sofort für alle Mitreisenden.</p>
 <button data-a="saveCfg" class="btn mt-3 w-full">Für alle speichern</button>
 <button data-a="testSearch" class="btn mt-2 w-full !bg-white !text-sea border border-sea/20">Live-Websuche testen</button>${ui.testRes?`<pre class="mt-2 whitespace-pre-wrap rounded-xl bg-white p-3 text-xs">${h(ui.testRes)}</pre>`:''}
@@ -170,7 +170,7 @@ async function runAI(){if(!cfg.gem)return toast('Bitte zuerst den Gemini-Key unt
 Wünsche: ${wish||'allgemeine Highlights'}
 Bereits gebuchte Tickets (Zeiten sind fix): ${tix||'keine'}
 Aufgabe: Erstelle tagesgenaue Routen, geografisch sinnvoll gruppiert, mit kurzen Wegezeiten ab dem Hotel bzw. vom vorherigen Ort, realistischen Öffnungszeiten sowie Pausen und Essen. Nenne im Feld note die Anreise (Verkehrsmittel und Minuten). Antworte NUR mit JSON in diesem Format: {"days":[{"date":"YYYY-MM-DD","items":[{"time":"HH:MM","title":"","place":"Name und Adresse für Google Maps","note":""}]}]}`;
- try{const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model||'gemini-2.5-flash'}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.gem},
+ try{const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model||'gemini-3.8-flash'}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.gem},
   body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json'}})});
   const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
   const out=JSON.parse(j.candidates[0].content.parts.map(p=>p.text||'').join('').replace(/```json|```/g,'').trim()),p=plan();
@@ -181,19 +181,18 @@ Aufgabe: Erstelle tagesgenaue Routen, geografisch sinnvoll gruppiert, mit kurzen
  ui.busy=false;save('plans')}
 
 const fmt=t=>h(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').split('\n').map(l=>/^\s*[-*] /.test(l)?`<div class="mt-1 flex gap-2"><span>•</span><span>${l.replace(/^\s*[-*] /,'')}</span></div>`:l.trim()?`<p class="mt-2">${l}</p>`:'').join('');
-const FALL='gemini-2.5-flash',
-CTX=`Familie mit 4 Personen, Unterkunft ${HOTEL.addr}, Reisezeit 19. bis 25.10.2026`,
+const CTX=`Familie mit 4 Personen, Unterkunft ${HOTEL.addr}, Reisezeit 19. bis 25.10.2026`,
 findIt=(pid,day,id)=>{const p=S.plans.find(x=>x.id===pid);return[p,(p?.days[day]||[]).find(x=>x.id===id)]},
 infoPrompt=(it,day)=>`Du bist Reiseberater für Barcelona (${CTX}). Recherchiere aktuell im Web zu diesem Programmpunkt: "${it.title}"${it.place?` (Ort bzw. Einstiegspunkt: ${it.place})`:''}${it.time?`, geplante Uhrzeit ${it.time}`:''} am ${dl(day)}. Notiz: ${it.note||'keine'}.${it.q?` Besonderer Wunsch: ${it.q}`:''}
 Antworte auf Deutsch, kompakt und ohne Einleitung: **Empfehlung** (bester Anbieter bzw. beste Option mit kurzer Begründung, bei mehreren Anbietern ein kurzer Vergleich), **Preise** für 4 Personen, **Zeiten** (Abfahrts- bzw. Öffnungszeiten genau für den Einstiegspunkt bzw. Ort im Oktober), **Anfahrt** vom Hotel, **Tipps** (Vorab-Buchung, beste Uhrzeit, Wartezeit). Wenn du etwas nicht sicher findest, schreibe das ausdrücklich und nenne die offizielle Webseite. Nutze **Fettdruck** für Überschriften und Listen mit "- ".`;
 
 async function gem(body,model){const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model||cfg.model}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.gem},body:JSON.stringify(body)});
  const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);return j}
-const gemF=async b=>{try{return await gem(b)}catch(e){if(cfg.model===FALL)throw e;return await gem(b,FALL)}};
+const gemF=b=>gem(b);
 async function ask(prompt){const body={contents:[{role:'user',parts:[{text:prompt}]}]},
  parse=j=>{const c=j.candidates?.[0],text=(c?.content?.parts||[]).map(x=>x.text||'').join('').trim();if(!text)throw new Error('Keine Antwort erhalten');
   const seen=new Set(),src=(c.groundingMetadata?.groundingChunks||[]).map(g=>g.web).filter(w=>w&&w.uri&&!seen.has(w.uri)&&seen.add(w.uri)).slice(0,6).map(w=>({t:w.title||'',u:w.uri}));return{text,src}},
- tries=[[cfg.model,1],[FALL,1],[cfg.model,0],[FALL,0]].filter((t,i,a)=>a.findIndex(u=>u[0]===t[0]&&u[1]===t[1])===i);let last,gerr='';
+ tries=[[cfg.model,1],[cfg.model,0]];let last,gerr='';
  for(const [m,w] of tries){try{return{...parse(await gem(w?{...body,tools:[{google_search:{}}]}:body,m)),web:!!w,err:w?'':gerr}}catch(e){last=e;if(w&&!gerr)gerr=e.message}}throw last}
 
 function vInfo(id){const it=findIt(ui.plan,ui.day,id)[1]||{},f=it.info,busy=ui.auto.has(id),q=encodeURIComponent(it.place||it.title+' Barcelona');
@@ -288,7 +287,7 @@ const A={
  runInfo:d=>{const q=($('#i-q')?.value||'').trim(),it=findIt(ui.plan,ui.day,d.id)[1];if(it)it.q=q;getInfo(ui.plan,ui.day,d.id,q,false)},
  askInfo:d=>{const q=($('#i-q')?.value||'').trim();if(!q)return toast('Bitte eine Frage eingeben');getInfo(ui.plan,ui.day,d.id,q,true)},
  async testSearch(){toast('Teste Live-Suche …');const res=[];
-  for(const m of [...new Set([cfg.model,FALL])]){try{const j=await gem({contents:[{role:'user',parts:[{text:'Wie wird das Wetter heute in Barcelona? Ein Satz.'}]}],tools:[{google_search:{}}]},m);
+  for(const m of [cfg.model]){try{const j=await gem({contents:[{role:'user',parts:[{text:'Wie wird das Wetter heute in Barcelona? Ein Satz.'}]}],tools:[{google_search:{}}]},m);
    res.push(`${m}: ${j.candidates?.[0]?.groundingMetadata?.groundingChunks?.length?'Live-Suche funktioniert':'Antwort ohne Quellen'}`)}catch(e){res.push(`${m}: ${String(e.message).slice(0,120)}`)}}
   ui.testRes=res.join('\n');render()},
  chat(){ui.chat=!ui.chat;render()},loc(){ui.noLoc=!ui.noLoc;render()},chatClear(){ui.msgs=[];ui.hist=[];render()},
