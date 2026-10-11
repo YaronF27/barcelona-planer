@@ -136,6 +136,7 @@ const vSet=()=>`<h2 class="font-display text-2xl">Einstellungen</h2>
 <label class="lbl" for="s-model">Modell</label><input id="s-model" class="inp" value="${h(cfg.model||'gemini-2.5-flash')}">
 <p class="mt-2 text-xs text-sea/60">Änderungen werden in Supabase gespeichert und gelten sofort für alle Mitreisenden.</p>
 <button data-a="saveCfg" class="btn mt-3 w-full">Für alle speichern</button>
+<button data-a="testSearch" class="btn mt-2 w-full !bg-white !text-sea border border-sea/20">Live-Websuche testen</button>${ui.testRes?`<pre class="mt-2 whitespace-pre-wrap rounded-xl bg-white p-3 text-xs">${h(ui.testRes)}</pre>`:''}
 <h3 class="mt-6 font-semibold">PIN ändern</h3><div class="mt-1 flex gap-2"><input id="s-pin" type="password" class="inp" placeholder="Neue PIN"><button data-a="savePin" class="btn">Ändern</button></div>
 <p class="mt-2 text-xs text-sea/60">Die PIN ist ein Komfortschutz. Den eigentlichen Schutz bietet, dass URL und Key nicht im GitHub-Repo stehen.</p>
 <h3 class="mt-6 font-semibold">Einmalige Supabase-Einrichtung</h3><p class="text-sm text-sea/70">Im SQL Editor ausführen:</p><pre class="mt-1 overflow-x-auto rounded-xl bg-white p-3 text-xs">${h(SQL)}</pre>
@@ -192,8 +193,8 @@ const gemF=async b=>{try{return await gem(b)}catch(e){if(cfg.model===FALL)throw 
 async function ask(prompt){const body={contents:[{role:'user',parts:[{text:prompt}]}]},
  parse=j=>{const c=j.candidates?.[0],text=(c?.content?.parts||[]).map(x=>x.text||'').join('').trim();if(!text)throw new Error('Keine Antwort erhalten');
   const seen=new Set(),src=(c.groundingMetadata?.groundingChunks||[]).map(g=>g.web).filter(w=>w&&w.uri&&!seen.has(w.uri)&&seen.add(w.uri)).slice(0,6).map(w=>({t:w.title||'',u:w.uri}));return{text,src}},
- tries=[[cfg.model,1],[FALL,1],[cfg.model,0],[FALL,0]].filter((t,i,a)=>a.findIndex(u=>u[0]===t[0]&&u[1]===t[1])===i);let last;
- for(const [m,w] of tries){try{return{...parse(await gem(w?{...body,tools:[{google_search:{}}]}:body,m)),web:!!w}}catch(e){last=e}}throw last}
+ tries=[[cfg.model,1],[FALL,1],[cfg.model,0],[FALL,0]].filter((t,i,a)=>a.findIndex(u=>u[0]===t[0]&&u[1]===t[1])===i);let last,gerr='';
+ for(const [m,w] of tries){try{return{...parse(await gem(w?{...body,tools:[{google_search:{}}]}:body,m)),web:!!w,err:w?'':gerr}}catch(e){last=e;if(w&&!gerr)gerr=e.message}}throw last}
 
 function vInfo(id){const it=findIt(ui.plan,ui.day,id)[1]||{},f=it.info,busy=ui.auto.has(id),q=encodeURIComponent(it.place||it.title+' Barcelona');
  return `<h3 class="font-display text-xl">${h(it.title)}</h3>
@@ -201,11 +202,11 @@ function vInfo(id){const it=findIt(ui.plan,ui.day,id)[1]||{},f=it.info,busy=ui.a
 <label class="lbl" for="i-q">${f?'Weitere Frage zu diesem Punkt':'Eigener Wunsch (optional)'}</label><input id="i-q" class="inp" value="${f?'':h(it.q||'')}" placeholder="${f?'z. B. Welche Haltestelle ist am nächsten?':'z. B. Abfahrtszeiten ab Plaça de Catalunya'}">
 <div class="mt-3 flex gap-2">${f?`<button data-a="askInfo" data-id="${h(id)}" class="btn flex-1" ${busy?'disabled':''}><i data-lucide="message-circle"></i>Fragen</button><button data-a="runInfo" data-id="${h(id)}" class="btn flex-1 !bg-white !text-sea border border-sea/20" ${busy?'disabled':''}>Neu recherchieren</button>`:`<button data-a="runInfo" data-id="${h(id)}" class="btn w-full" ${busy?'disabled':''}><i data-lucide="sparkles"></i>Infos und Empfehlungen holen</button>`}</div>
 ${busy?'<p class="mt-3 text-sm text-sea/70">KI recherchiert …</p>':''}
-${f?`<div class="mt-4 rounded-2xl bg-white p-4 text-sm leading-relaxed">${fmt(f.text)}</div>${(it.qa||[]).map(x=>`<div class="mt-3 rounded-2xl bg-sea/5 p-3 text-sm"><b>${h(x.q)}</b>${fmt(x.a)}</div>`).join('')}${f.src?.length?`<p class="mt-3 text-sm font-semibold">Quellen</p>${f.src.map(s=>`<a href="${h(s.u)}" target="_blank" rel="noopener" class="mt-1 block truncate text-sm text-az">${h(s.t||s.u)}</a>`).join('')}`:''}<p class="mt-3 text-xs text-sea/60">${f.web===false?'Ohne Live-Websuche erstellt (Kontingent). ':''}KI-Angaben können veraltet sein. Zeiten und Preise bitte beim Anbieter prüfen.</p>`:''}`}
+${f?`<div class="mt-4 rounded-2xl bg-white p-4 text-sm leading-relaxed">${fmt(f.text)}</div>${(it.qa||[]).map(x=>`<div class="mt-3 rounded-2xl bg-sea/5 p-3 text-sm"><b>${h(x.q)}</b>${fmt(x.a)}</div>`).join('')}${f.src?.length?`<p class="mt-3 text-sm font-semibold">Quellen</p>${f.src.map(s=>`<a href="${h(s.u)}" target="_blank" rel="noopener" class="mt-1 block truncate text-sm text-az">${h(s.t||s.u)}</a>`).join('')}`:''}<p class="mt-3 text-xs text-sea/60">${f.web===false?`Ohne Live-Websuche erstellt${f.err?' (Google: '+h(f.err.slice(0,140))+')':''}. `:''}KI-Angaben können veraltet sein. Zeiten und Preise bitte beim Anbieter prüfen.</p>`:''}`}
 
 async function getInfo(pid,day,id,q,follow){const it=findIt(pid,day,id)[1];if(!it||!cfg.gem)return;ui.auto.add(id);render();
  try{if(follow&&it.info){const r=await ask(`Du bist Reiseberater für Barcelona (${CTX}). Programmpunkt: "${it.title}" (${it.place||'kein Ort'}). Bisherige Recherche:\n${it.info.text}\nWeitere Frage: ${q}\nAntworte kurz und konkret auf Deutsch und recherchiere bei Bedarf aktuell im Web.`);(it.qa=it.qa||[]).push({q,a:r.text})}
- else{const r=await ask(infoPrompt(it,day));it.info={text:r.text,src:r.src,web:r.web,ts:Date.now()}}}
+ else{const r=await ask(infoPrompt(it,day));it.info={text:r.text,src:r.src,web:r.web,err:r.err||'',ts:Date.now()}}}
  catch(e){toast('KI-Fehler: '+e.message)}
  ui.auto.delete(id);save('plans')}
 
@@ -232,7 +233,7 @@ RUN={
  replace_day:(a,c)=>{if(!DAYS.includes(a.date))return{error:'Datum nur 2026-10-19 bis 2026-10-25'};pl(a).days[a.date]=(a.items||[]).map(newIt);c.log.push(`Tag neu geplant: ${dl(a.date)}`);return{ok:true}},
  add_plan:(a,c)=>{const p={id:uid(),name:a.name,days:{}};S.plans.push(p);c.log.push(`Neuer Plan: ${a.name}`);return{ok:true,plan_id:p.id}},
  show_map:(a,c)=>{c.cards.push({to:a.place,from:a.from_place||(c.loc?`${c.loc.lat},${c.loc.lng}`:'')});return{ok:true}},
- search_web:async a=>{try{return{text:(await ask(a.query+' (Barcelona, Oktober 2026; knapp und mit Fakten antworten)')).text}}catch(e){return{error:e.message}}}};
+ search_web:async a=>{try{const r=await ask(a.query+' (Barcelona, Oktober 2026; knapp und mit Fakten antworten)');return{text:r.text,live:r.web,hinweis:r.web?'':'KEINE Live-Websuche möglich (Google-Kontingent). Sage dem Nutzer ausdrücklich, dass die Angaben nicht aktuell geprüft sind.'}}catch(e){return{error:e.message}}}};
 
 const getLoc=()=>new Promise(r=>{if(!navigator.geolocation||ui.noLoc)return r(null);navigator.geolocation.getCurrentPosition(p=>r({lat:+p.coords.latitude.toFixed(5),lng:+p.coords.longitude.toFixed(5)}),()=>r(null),{timeout:6000,maximumAge:60000})});
 function sysPrompt(loc){const n=new Date(),today=n.toLocaleDateString('sv-SE',{timeZone:'Europe/Madrid'}),tm=n.toLocaleString('de-DE',{timeZone:'Europe/Madrid',weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}),
@@ -286,6 +287,10 @@ const A={
  info:d=>{ui.modal={t:'info',id:d.id};render()},
  runInfo:d=>{const q=($('#i-q')?.value||'').trim(),it=findIt(ui.plan,ui.day,d.id)[1];if(it)it.q=q;getInfo(ui.plan,ui.day,d.id,q,false)},
  askInfo:d=>{const q=($('#i-q')?.value||'').trim();if(!q)return toast('Bitte eine Frage eingeben');getInfo(ui.plan,ui.day,d.id,q,true)},
+ async testSearch(){toast('Teste Live-Suche …');const res=[];
+  for(const m of [...new Set([cfg.model,FALL])]){try{const j=await gem({contents:[{role:'user',parts:[{text:'Wie wird das Wetter heute in Barcelona? Ein Satz.'}]}],tools:[{google_search:{}}]},m);
+   res.push(`${m}: ${j.candidates?.[0]?.groundingMetadata?.groundingChunks?.length?'Live-Suche funktioniert':'Antwort ohne Quellen'}`)}catch(e){res.push(`${m}: ${String(e.message).slice(0,120)}`)}}
+  ui.testRes=res.join('\n');render()},
  chat(){ui.chat=!ui.chat;render()},loc(){ui.noLoc=!ui.noLoc;render()},chatClear(){ui.msgs=[];ui.hist=[];render()},
  quick:d=>chatSend(d.q),send(){const t=($('#c-in')?.value||'').trim();if(t&&!ui.cb)chatSend(t)},
  trin:(d,el)=>{ui.tr[d.k]=Math.max(1,+el.value||1);render()},
